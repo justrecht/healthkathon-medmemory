@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
-import { Moon, Settings, SunMedium, UserRound, Users } from "lucide-react-native";
 import { useEffect, useState } from "react";
+import { FaGear, FaMoon, FaSun, FaUser, FaUserGroup } from "react-icons/fa6";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -41,7 +41,7 @@ export default function ProfileScreen() {
           headerTitleStyle: { color: theme.colors.textPrimary, fontWeight: "600" },
           headerRight: () => (
             <Pressable onPress={() => router.push("/settings" as const)} hitSlop={12}>
-              <Settings color={theme.colors.textPrimary} size={22} />
+              <FaGear color={theme.colors.textPrimary} size={22} />
             </Pressable>
           ),
         }}
@@ -54,7 +54,7 @@ export default function ProfileScreen() {
             <>
               <View style={styles.userRow}>
                 <View style={[styles.avatar, { backgroundColor: theme.colors.cardMuted }]}>
-                  <UserRound color={theme.colors.accent} size={32} />
+                  <FaUser color={theme.colors.accent} size={32} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <ThemedText variant="heading" weight="700">
@@ -89,7 +89,7 @@ export default function ProfileScreen() {
           <SectionHeader title="Preferensi tampilan" subtitle="Light / Dark mode" />
           <View style={styles.preferenceCard}>
             <LinearGradient colors={theme.colors.gradient} style={styles.preferenceIcon}>
-              {mode === "dark" ? <Moon color="white" /> : <SunMedium color="white" />}
+              {mode === "dark" ? <FaMoon color="white" size={24} /> : <FaSun color="white" size={24} />}
             </LinearGradient>
             <View style={{ flex: 1 }}>
               <ThemedText weight="600">Mode {mode === "dark" ? "Gelap" : "Terang"}</ThemedText>
@@ -151,7 +151,7 @@ function TeamItem({ title, subtitle, indicator }: TeamItemProps) {
   return (
     <View style={[styles.teamRow, { borderColor: theme.colors.border }]}> 
       <View style={[styles.teamAvatar, { backgroundColor: theme.colors.cardMuted }]}>
-        <Users color={theme.colors.accent} size={20} />
+        <FaUserGroup color={theme.colors.accent} size={20} />
       </View>
       <View style={{ flex: 1 }}>
         <ThemedText weight="600">{title}</ThemedText>

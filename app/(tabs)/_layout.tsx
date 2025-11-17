@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Home, UserRound } from "lucide-react-native";
+import { FaHouse, FaUser } from "react-icons/fa6";
 import { View } from "react-native";
 
 import { useTheme } from "../../src/theme";
@@ -33,7 +33,7 @@ export default function TabsLayout() {
           title: "Beranda",
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
-              <Home color={color} size={size} />
+              <FaHouse color={color} size={size} />
             </View>
           ),
         }}
@@ -44,7 +44,7 @@ export default function TabsLayout() {
           title: "Profil",
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
-              <UserRound color={color} size={size} />
+              <FaUser color={color} size={size} />
             </View>
           ),
         }}

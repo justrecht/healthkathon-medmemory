@@ -1,13 +1,13 @@
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  Activity,
-  BellRing,
-  Clock4,
-  Pill,
-  ShieldCheck,
-  Stethoscope,
-} from "lucide-react-native";
 import { useEffect, useState } from "react";
+import {
+  FaBell,
+  FaChartLine,
+  FaClock,
+  FaPills,
+  FaShieldHalved,
+  FaStethoscope,
+} from "react-icons/fa6";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -72,7 +72,7 @@ export default function HomeScreen() {
               <ThemedText variant="title" weight="700" style={{ color: "white" }}>
                 MedMemory
               </ThemedText>
-              <BellRing color="white" />
+              <FaBell color="white" size={24} />
             </View>
             <Text style={styles.heroSubtitle}>Pendamping terapi untuk peserta JKN</Text>
             <View style={styles.heroTags}>
@@ -90,7 +90,7 @@ export default function HomeScreen() {
           />
           <View style={styles.nextDoseRow}>
             <View style={[styles.pillIcon, { backgroundColor: theme.colors.cardMuted }]}>
-              <Pill color={theme.colors.accent} size={24} />
+              <FaPills color={theme.colors.accent} size={24} />
             </View>
             <View style={{ flex: 1 }}>
               <ThemedText variant="heading" weight="600">
@@ -168,7 +168,7 @@ export default function HomeScreen() {
                       { backgroundColor: theme.colors.cardMuted },
                     ]}
                   >
-                    <Clock4 color={theme.colors.accent} size={22} />
+                    <FaClock color={theme.colors.accent} size={22} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <ThemedText weight="600">{item.title}</ThemedText>
@@ -191,18 +191,18 @@ export default function HomeScreen() {
               <ThemedText weight="600">Rina Mulyani</ThemedText>
               <ThemedText color="muted">Anak | +62 812-1234-5678</ThemedText>
             </View>
-            <ShieldCheck color={theme.colors.success} size={28} />
+            <FaShieldHalved color={theme.colors.success} size={28} />
           </View>
           <View style={styles.caregiverActions}>
             <Surface muted padding={true} style={{ flex: 1 }}>
               <View style={styles.actionContent}>
-                <Activity color={theme.colors.accent} size={20} />
+                <FaChartLine color={theme.colors.accent} size={20} />
                 <ThemedText>Riwayat konsumsi</ThemedText>
               </View>
             </Surface>
             <Surface muted padding={true} style={{ flex: 1 }}>
               <View style={styles.actionContent}>
-                <Stethoscope color={theme.colors.accent} size={20} />
+                <FaStethoscope color={theme.colors.accent} size={20} />
                 <ThemedText>Konsultasi klinik</ThemedText>
               </View>
             </Surface>

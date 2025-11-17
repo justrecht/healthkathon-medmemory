@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
-import { ArrowLeft, Bell, Link2Icon, Palette, ShieldCheck } from "lucide-react-native";
 import { ReactNode, useState } from "react";
+import { FaArrowLeft, FaBell, FaLink, FaPalette, FaShieldHalved } from "react-icons/fa6";
 import { Pressable, ScrollView, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -32,7 +32,7 @@ export default function SettingsScreen() {
           },
           headerLeft: () => (
             <Pressable onPress={() => router.back()} hitSlop={12}>
-              <ArrowLeft color={theme.colors.textPrimary} size={22} />
+              <FaArrowLeft color={theme.colors.textPrimary} size={22} />
             </Pressable>
           ),
         }}
@@ -56,13 +56,13 @@ export default function SettingsScreen() {
         <Surface>
           <SectionHeader title="Pengingat" subtitle="Notifikasi Mobile JKN" />
           <SettingToggle
-            icon={<Bell color={theme.colors.accent} size={20} />}
+            icon={<FaBell color={theme.colors.accent} size={20} />}
             title="Notifikasi sebelum jadwal"
             description="Dikirim 30 menit sebelumnya"
             initialValue
           />
           <SettingToggle
-            icon={<Palette color={theme.colors.accent} size={20} />}
+            icon={<FaPalette color={theme.colors.accent} size={20} />}
             title="Ringkas tampilan malam"
             description="Kurangi elemen visual saat jam istirahat"
           />
@@ -71,12 +71,12 @@ export default function SettingsScreen() {
         <Surface>
           <SectionHeader title="Integrasi" subtitle="Konektivitas layanan JKN" />
           <IntegrationCard
-            icon={<ShieldCheck color="white" size={26} />}
+            icon={<FaShieldHalved color="white" size={26} />}
             title="Prolanis"
             subtitle="Sinkron jadwal kontrol & pengingat obat"
           />
           <IntegrationCard
-            icon={<Link2Icon color="white" size={26} />}
+            icon={<FaLink color="white" size={26} />}
             title="Rekam medis elektronik"
             subtitle="Tarik catatan terapi terakhir klinik"
           />
