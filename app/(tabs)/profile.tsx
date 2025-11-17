@@ -38,15 +38,15 @@ export default function ProfileScreen() {
           headerTransparent: false,
           headerTitle: "Profil",
           headerStyle: { backgroundColor: theme.colors.background },
-          headerTitleStyle: { color: theme.colors.textPrimary, fontWeight: "600" },
+          headerTitleStyle: { color: theme.colors.textPrimary, fontWeight: "600", fontFamily: theme.typography.fontFamily, fontSize: 16 },
           headerRight: () => (
             <Pressable onPress={() => router.push("/settings" as const)} hitSlop={12}>
-              <FontAwesome6 name="gear" color={theme.colors.textPrimary} size={22} />
+              <FontAwesome6 name="gear" color={theme.colors.textPrimary} size={18} />
             </Pressable>
           ),
         }}
       />
-      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}>
+      <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
         <Surface>
           {loading ? (
             <ProfileShimmer />
@@ -129,8 +129,8 @@ type StatProps = {
 function StatItem({ label, value, caption }: StatProps) {
   return (
     <View style={{ flex: 1 }}>
-      <ThemedText color="muted">{label}</ThemedText>
-      <ThemedText variant="heading" weight="700">
+      <ThemedText variant="caption" color="muted">{label}</ThemedText>
+      <ThemedText variant="subheading" weight="600">
         {value}
       </ThemedText>
       <ThemedText variant="caption" color="muted">

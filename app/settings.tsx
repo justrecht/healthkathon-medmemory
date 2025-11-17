@@ -27,6 +27,7 @@ export default function SettingsScreen() {
           headerStyle: { backgroundColor: theme.colors.background },
           headerTitleStyle: {
             color: theme.colors.textPrimary,
+            fontSize: 16,
             fontWeight: "600",
             fontFamily: theme.typography.fontFamily,
           },
@@ -37,7 +38,7 @@ export default function SettingsScreen() {
           ),
         }}
       />
-      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}>
+      <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
         <Surface>
           <SectionHeader title="Tampilan" subtitle="Mode terang / gelap" />
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
