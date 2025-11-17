@@ -25,15 +25,16 @@ export default function SettingsScreen() {
           headerTransparent: false,
           headerTitle: "Pengaturan",
           headerStyle: { backgroundColor: theme.colors.background },
+          headerShadowVisible: false,
           headerTitleStyle: {
             color: theme.colors.textPrimary,
             fontSize: 16,
-            fontWeight: "600",
+            fontWeight: "700",
             fontFamily: theme.typography.fontFamily,
           },
           headerLeft: () => (
-            <Pressable onPress={() => router.back()} hitSlop={12}>
-              <FontAwesome6 name="arrow-left" color={theme.colors.textPrimary} size={18} />
+            <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginLeft: 4, marginRight: 12 }}>
+              <FontAwesome6 name="arrow-left" color={theme.colors.textPrimary} size={14} />
             </Pressable>
           ),
         }}

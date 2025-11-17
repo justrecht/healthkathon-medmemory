@@ -18,14 +18,16 @@ export default function TabsLayout() {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.border,
           borderTopWidth: 0.5,
-          height: 64,
+          height: 60,
           paddingHorizontal: theme.spacing.md,
-          paddingBottom: 12,
+          paddingBottom: 8,
+          paddingTop: 8,
         },
         tabBarLabelStyle: {
           fontWeight: "500",
           fontSize: 11,
           fontFamily: theme.typography.fontFamily,
+          marginTop: 4,
         },
       }}
     >
@@ -35,7 +37,7 @@ export default function TabsLayout() {
           title: "Beranda",
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
-              <FontAwesome6 name="house" color={color} size={size} />
+              <FontAwesome6 name="house" solid color={color} size={20} />
             </View>
           ),
         }}
@@ -46,7 +48,7 @@ export default function TabsLayout() {
           title: "Profil",
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
-              <FontAwesome6 name="user" color={color} size={size} />
+              <FontAwesome6 name="user" solid color={color} size={20} />
             </View>
           ),
         }}

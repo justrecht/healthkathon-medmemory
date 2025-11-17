@@ -4,13 +4,9 @@ MedMemory adalah MVP mobile app untuk Healthkathon JKN yang membantu peserta ter
 
 ## Fitur Utama
 
-- **Dashboard kepatuhan** - Hero card dengan jadwal dosis berikutnya, progres timeline 7 hari, dan daftar pengingat harian yang diambil dari database MongoDB.
-- **Pemantauan keluarga & care team** - Bagian khusus untuk caregiver dan tenaga kesehatan agar mudah memantau pasien dengan data real-time.
-- **Profil peserta** - Statistik Prolanis, ringkasan kunjungan klinik, dan akses cepat ke pengaturan melalui header button.
-- **Halaman pengaturan** - Tombol ganti tema (dark mode memakai #0E0E0E dengan warna secondary yang lebih lembut di light mode), kontrol notifikasi, dan kartu integrasi layanan JKN.
-- **Navigasi tab modern** - Bottom tabs berbasis `@react-navigation/bottom-tabs` dengan ikon dari `lucide-react-native`.
-- **Shimmer loading states** - Skeleton loader yang elegan saat mengambil data dari database untuk UX yang lebih baik.
-- **Tipografi Geist** - Custom font Geist untuk tampilan modern dan profesional.
+- Pengingat obat terjadwal dengan notifikasi sebelum, saat, dan setelah waktu minum obat.
+- Pencatatan konsumsi obat harian, termasuk visualisasi grafik kepatuhan.
+- Fitur Caregiver, memungkinkan keluarga menerima notifikasi jika pasien belum mengonfirmasi konsumsi obat.
 
 ## Struktur Proyek
 
@@ -22,7 +18,7 @@ MedMemory adalah MVP mobile app untuk Healthkathon JKN yang membantu peserta ter
 ## Menjalankan Aplikasi
 
 ```bash
-npm install --legacy-peer-deps
+npm install
 npm run lint   # opsional tapi direkomendasikan
 npm start      # membuka Expo DevTools
 ```

@@ -1,10 +1,10 @@
 import {
-    PropsWithChildren,
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useState,
+  PropsWithChildren,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
 } from "react";
 import { Appearance } from "react-native";
 
@@ -94,9 +94,9 @@ const lightTheme: Theme = {
 
 const darkTheme: Theme = {
   colors: {
-    background: "#0E0E0E",
-    card: "#161616",
-    cardMuted: "#1F1F1F",
+    background: "#1A1A1A",
+    card: "#242424",
+    cardMuted: "#2E2E2E",
     textPrimary: "#F2F4FF",
     textSecondary: "#B0B6C5",
     muted: "rgba(255,255,255,0.45)",

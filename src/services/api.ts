@@ -55,7 +55,6 @@ const mockCaregivers = [
 
 export async function getReminders() {
   if (USE_MOCK_DATA) {
-    // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 800));
     return mockReminders;
   }
@@ -99,5 +98,45 @@ export async function getCaregivers() {
   } catch (error) {
     console.error("Error fetching caregivers:", error);
     return mockCaregivers;
+  }
+}
+
+export async function confirmMedication(medicationId: string) {
+  if (USE_MOCK_DATA) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { success: true, confirmedAt: new Date().toISOString() };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/medications/${medicationId}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmedAt: new Date().toISOString() }),
+    });
+    if (!response.ok) throw new Error("Failed to confirm medication");
+    return await response.json();
+  } catch (error) {
+    console.error("Error confirming medication:", error);
+    return { success: false, error };
+  }
+}
+
+export async function updateReminderStatus(reminderId: string, status: "taken" | "missed" | "scheduled") {
+  if (USE_MOCK_DATA) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { success: true };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) throw new Error("Failed to update reminder");
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating reminder:", error);
+    return { success: false, error };
   }
 }

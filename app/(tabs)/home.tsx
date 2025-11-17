@@ -1,7 +1,7 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ReminderShimmer } from "../../src/components/shimmer";
@@ -11,7 +11,19 @@ import {
   Surface,
   ThemedText,
 } from "../../src/components/ui";
-import { getReminders } from "../../src/services/api";
+import { confirmMedication, getCaregivers, getReminders, updateReminderStatus } from "../../src/services/api";
+import {
+  addNotificationResponseListener,
+  registerForPushNotifications,
+  scheduleReminderNotification,
+  sendCaregiverNotification,
+} from "../../src/services/notifications";
+import {
+  calculateAdherence,
+  getDailyAdherence,
+  saveMedicationRecord,
+  type MedicationRecord,
+} from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
 const adherence = [
@@ -28,18 +40,170 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adherenceData, setAdherenceData] = useState(adherence);
+  const [adherencePercentage, setAdherencePercentage] = useState(94);
+  const [activeRemindersCount, setActiveRemindersCount] = useState(3);
+  const [caregivers, setCaregivers] = useState<any[]>([]);
 
   useEffect(() => {
-    getReminders()
-      .then((data) => {
-        setReminders(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch reminders:", err);
-        setLoading(false);
-      });
+    // Request notification permissions
+    registerForPushNotifications();
+
+    // Load initial data
+    loadData();
+
+    // Set up notification response listener
+    const subscription = addNotificationResponseListener((response) => {
+      const { medicationId, type } = response.notification.request.content.data as { medicationId: string; type: string };
+      console.log("Notification tapped:", type, medicationId);
+      
+      if (type === "ontime" || type === "after") {
+        // Navigate to confirmation or show alert
+        Alert.alert(
+          "Konfirmasi Minum Obat",
+          "Apakah Anda sudah minum obat?",
+          [
+            { text: "Belum", style: "cancel" },
+            { text: "Sudah", onPress: () => handleConfirmMedication(medicationId) },
+          ]
+        );
+      }
+    });
+
+    // Schedule notifications for all reminders
+    scheduleAllNotifications();
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
+
+  async function loadData() {
+    try {
+      const [remindersData, adherencePercent, dailyData, caregiversData] = await Promise.all([
+        getReminders(),
+        calculateAdherence(7),
+        getDailyAdherence(7),
+        getCaregivers(),
+      ]);
+
+      setReminders(remindersData);
+      setAdherencePercentage(adherencePercent);
+      setCaregivers(caregiversData);
+      
+      if (dailyData.length > 0) {
+        setAdherenceData(dailyData);
+      }
+
+      const activeCount = remindersData.filter((r: any) => r.status === "scheduled").length;
+      setActiveRemindersCount(activeCount);
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+      setLoading(false);
+    }
+  }
+
+  async function scheduleAllNotifications() {
+    try {
+      const remindersData = await getReminders();
+      for (const reminder of remindersData) {
+        if (reminder.status === "scheduled") {
+          await scheduleReminderNotification({
+            id: reminder.id,
+            title: reminder.title,
+            dosage: reminder.dosage,
+            time: reminder.time,
+            notes: reminder.notes,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error scheduling notifications:", error);
+    }
+  }
+
+  async function handleConfirmMedication(medicationId?: string) {
+    const targetId = medicationId || nextReminder.id;
+    if (!targetId) return;
+
+    try {
+      // Confirm via API
+      await confirmMedication(targetId);
+      
+      // Update local status
+      await updateReminderStatus(targetId, "taken");
+      
+      // Save to history
+      const reminder = reminders.find((r) => r.id === targetId);
+      if (reminder) {
+        const record: MedicationRecord = {
+          id: `${targetId}-${Date.now()}`,
+          medicationId: targetId,
+          medicationName: reminder.title,
+          dosage: reminder.dosage,
+          scheduledTime: reminder.time,
+          takenAt: new Date().toISOString(),
+          status: "taken",
+          date: new Date().toISOString(),
+          confirmedBy: "user",
+        };
+        await saveMedicationRecord(record);
+      }
+
+      // Update UI
+      setReminders((prev) =>
+        prev.map((r) => (r.id === targetId ? { ...r, status: "taken" } : r))
+      );
+
+      // Refresh adherence data
+      const newAdherence = await calculateAdherence(7);
+      setAdherencePercentage(newAdherence);
+      
+      const dailyData = await getDailyAdherence(7);
+      if (dailyData.length > 0) {
+        setAdherenceData(dailyData);
+      }
+
+      Alert.alert("Berhasil", "Konsumsi obat telah dikonfirmasi!");
+    } catch (error) {
+      console.error("Error confirming medication:", error);
+      Alert.alert("Error", "Gagal mengonfirmasi konsumsi obat");
+    }
+  }
+
+  // Check for missed medications and notify caregivers
+  useEffect(() => {
+    const checkMissedMedications = setInterval(async () => {
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      
+      for (const reminder of reminders) {
+        if (reminder.status === "scheduled") {
+          const [schedHour, schedMin] = reminder.time.split(":").map(Number);
+          const scheduledTime = new Date();
+          scheduledTime.setHours(schedHour, schedMin, 0, 0);
+          
+          // If 30 minutes past scheduled time and not confirmed
+          const timeDiff = now.getTime() - scheduledTime.getTime();
+          if (timeDiff > 30 * 60 * 1000 && timeDiff < 35 * 60 * 1000) {
+            // Notify caregivers
+            const activeCaregivers = caregivers.filter((c) => c.status === "active");
+            for (const caregiver of activeCaregivers) {
+              await sendCaregiverNotification(
+                caregiver.name,
+                reminder.title,
+                "Pasien"
+              );
+            }
+          }
+        }
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+
+    return () => clearInterval(checkMissedMedications);
+  }, [reminders, caregivers]);
 
   const nextReminder = reminders[0] || {
     title: "Belum ada pengingat",
@@ -69,8 +233,8 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.heroSubtitle}>Pendamping terapi untuk peserta JKN</Text>
             <View style={styles.heroTags}>
-              <GradientChip label="Kepatuhan 94%" />
-              <GradientChip label="3 pengingat aktif" />
+              <GradientChip label={`Kepatuhan ${adherencePercentage}%`} />
+              <GradientChip label={`${activeRemindersCount} pengingat aktif`} />
             </View>
           </LinearGradient>
         </Surface>
@@ -102,7 +266,8 @@ export default function HomeScreen() {
             </View>
           </View>
           <Pressable
-            style={[styles.primaryButton, { backgroundColor: theme.colors.textPrimary }]}
+            style={[styles.primaryButton, { backgroundColor: theme.colors.accent }]}
+            onPress={() => handleConfirmMedication()}
           >
             <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Konfirmasi minum obat</Text>
           </Pressable>
@@ -112,7 +277,7 @@ export default function HomeScreen() {
           <SectionHeader title="Timeline terapi" subtitle="Catatan konsumsi 7 hari" />
           {/* Compact histogram so pasien dapat memantau pola kepatuhan mingguan */}
           <View style={styles.timelineRow}>
-            {adherence.map((day) => (
+            {adherenceData.map((day) => (
               <View key={day.label} style={styles.timelineColumn}>
                 <View
                   style={[
@@ -179,13 +344,15 @@ export default function HomeScreen() {
 
         <Surface>
           <SectionHeader title="Pemantauan keluarga" subtitle="Caregiver menerima notifikasi" />
-          <View style={styles.caregiverRow}>
-            <View style={{ flex: 1 }}>
-              <ThemedText weight="500">Rina Mulyani</ThemedText>
-              <ThemedText variant="caption" color="muted">Anak | +62 812-1234-5678</ThemedText>
+          {caregivers.filter((c) => c.status === "active").map((caregiver) => (
+            <View key={caregiver.id} style={styles.caregiverRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText weight="500">{caregiver.name}</ThemedText>
+                <ThemedText variant="caption" color="muted">{caregiver.role} | {caregiver.contact}</ThemedText>
+              </View>
+              <FontAwesome6 name="shield-halved" color={theme.colors.success} size={20} />
             </View>
-            <FontAwesome6 name="shield-halved" color={theme.colors.success} size={20} />
-          </View>
+          ))}
           <View style={styles.caregiverActions}>
             <Surface muted padding={true} style={{ flex: 1 }}>
               <View style={styles.actionContent}>
