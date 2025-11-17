@@ -1,9 +1,12 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AddMedicationModal } from "../../src/components/AddMedicationModal";
+import { ConfirmMedicationModal } from "../../src/components/ConfirmMedicationModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
   GradientChip,
@@ -26,24 +29,17 @@ import {
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
-const adherence = [
-  { label: "Sen", value: 92 },
-  { label: "Sel", value: 94 },
-  { label: "Rab", value: 88 },
-  { label: "Kam", value: 96 },
-  { label: "Jum", value: 91 },
-  { label: "Sab", value: 89 },
-  { label: "Min", value: 95 },
-];
-
 export default function HomeScreen() {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [adherenceData, setAdherenceData] = useState(adherence);
-  const [adherencePercentage, setAdherencePercentage] = useState(94);
-  const [activeRemindersCount, setActiveRemindersCount] = useState(3);
+  const [adherenceData, setAdherenceData] = useState<any[]>([]);
+  const [adherencePercentage, setAdherencePercentage] = useState(0);
+  const [activeRemindersCount, setActiveRemindersCount] = useState(0);
   const [caregivers, setCaregivers] = useState<any[]>([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMedication, setNewMedication] = useState({ title: "", dosage: "", time: "", notes: "" });
 
   useEffect(() => {
     // Request notification permissions
@@ -124,9 +120,33 @@ export default function HomeScreen() {
     }
   }
 
+  async function handleAddMedication() {
+    if (!newMedication.title || !newMedication.dosage || !newMedication.time) {
+      Alert.alert("Error", "Mohon lengkapi semua field yang diperlukan");
+      return;
+    }
+
+    const newReminder = {
+      id: `med-${Date.now()}`,
+      title: newMedication.title,
+      dosage: newMedication.dosage,
+      time: newMedication.time,
+      notes: newMedication.notes,
+      status: "scheduled",
+    };
+
+    setReminders((prev) => [...prev, newReminder]);
+    await scheduleReminderNotification(newReminder);
+    
+    setNewMedication({ title: "", dosage: "", time: "", notes: "" });
+    setShowAddModal(false);
+    Alert.alert("Berhasil", "Pengingat obat berhasil ditambahkan!");
+  }
+
   async function handleConfirmMedication(medicationId?: string) {
     const targetId = medicationId || nextReminder.id;
     if (!targetId) return;
+    setShowConfirmModal(false);
 
     try {
       // Confirm via API
@@ -166,7 +186,7 @@ export default function HomeScreen() {
         setAdherenceData(dailyData);
       }
 
-      Alert.alert("Berhasil", "Konsumsi obat telah dikonfirmasi!");
+      // Success handled by modal close
     } catch (error) {
       console.error("Error confirming medication:", error);
       Alert.alert("Error", "Gagal mengonfirmasi konsumsi obat");
@@ -205,17 +225,13 @@ export default function HomeScreen() {
     return () => clearInterval(checkMissedMedications);
   }, [reminders, caregivers]);
 
-  const nextReminder = reminders[0] || {
-    title: "Belum ada pengingat",
-    time: "--:--",
-    dosage: "-",
-    notes: "Tambahkan pengingat pertama Anda",
-  };
+  const nextReminder = reminders.length > 0 ? reminders[0] : null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
       <ScrollView
-        contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}
+        contentContainerStyle={[styles.scrollContent, { padding: theme.spacing.md, gap: theme.spacing.md }]}
         showsVerticalScrollIndicator={false}
       >
         <Surface padding={false}>
@@ -225,8 +241,8 @@ export default function HomeScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.hero}
           >
-            <View style={{ flexDirection: "row", justifyContent: "space-between", width: "100%" }}>
-              <ThemedText variant="title" weight="700" style={{ color: "white" }}>
+            <View style={styles.heroHeader}>
+              <ThemedText variant="title" weight="700" style={styles.heroTitle}>
                 MedMemory
               </ThemedText>
               <FontAwesome6 name="bell" color="white" size={24} />
@@ -243,34 +259,45 @@ export default function HomeScreen() {
           <SectionHeader
             title="Dosis berikutnya"
             subtitle="Sinkron dengan jadwal Prolanis"
-            actionLabel="Detail"
+            actionLabel="Tambah"
+            onActionPress={() => setShowAddModal(true)}
           />
-          <View style={styles.nextDoseRow}>
-            <View style={[styles.pillIcon, { backgroundColor: theme.colors.cardMuted }]}>
-              <FontAwesome6 name="pills" color={theme.colors.accent} size={18} />
+          {nextReminder ? (
+            <>
+            <View style={styles.nextDoseRow}>
+              <View style={[styles.pillIcon, { backgroundColor: theme.colors.cardMuted }]}>
+                <FontAwesome6 name="pills" color={theme.colors.accent} size={18} />
+              </View>
+              <View style={styles.nextDoseContent}>
+                  <ThemedText variant="subheading" weight="600">
+                    {nextReminder.title}
+                  </ThemedText>
+                  <ThemedText variant="caption" color="secondary">{nextReminder.dosage}</ThemedText>
+                  <ThemedText variant="caption" color="muted">{nextReminder.notes}</ThemedText>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <ThemedText variant="subheading" weight="600">
+                    {nextReminder.time}
+                  </ThemedText>
+                  <ThemedText variant="caption" color="muted">
+                    hari ini
+                  </ThemedText>
+                </View>
+              </View>
+              <Pressable
+                style={[styles.primaryButton, { backgroundColor: theme.colors.accent }]}
+                onPress={() => setShowConfirmModal(true)}
+              >
+                <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Konfirmasi minum obat</Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={styles.emptyState}>
+              <FontAwesome6 name="calendar-plus" color={theme.colors.muted} size={48} />
+              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat</ThemedText>
+              <ThemedText variant="caption" color="muted">Tambahkan pengingat pertama Anda</ThemedText>
             </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="subheading" weight="600">
-                {nextReminder.title}
-              </ThemedText>
-              <ThemedText variant="caption" color="secondary">{nextReminder.dosage}</ThemedText>
-              <ThemedText variant="caption" color="muted">{nextReminder.notes}</ThemedText>
-            </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <ThemedText variant="subheading" weight="600">
-                {nextReminder.time}
-              </ThemedText>
-              <ThemedText variant="caption" color="muted">
-                hari ini
-              </ThemedText>
-            </View>
-          </View>
-          <Pressable
-            style={[styles.primaryButton, { backgroundColor: theme.colors.accent }]}
-            onPress={() => handleConfirmMedication()}
-          >
-            <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Konfirmasi minum obat</Text>
-          </Pressable>
+          )}
         </Surface>
 
         <Surface>
@@ -289,14 +316,15 @@ export default function HomeScreen() {
                     colors={theme.colors.gradient}
                     start={{ x: 0, y: 1 }}
                     end={{ x: 0, y: 0 }}
-                    style={{
-                      height: `${day.value}%`,
-                      borderRadius: theme.radius.md,
-                      width: "100%",
-                    }}
+                    style={[
+                      styles.timelineBar,
+                      {
+                        height: `${day.value}%`,
+                      },
+                    ]}
                   />
                 </View>
-                <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>
+                <ThemedText variant="caption" color="muted" style={styles.timelineLabel}>
                   {day.label}
                 </ThemedText>
               </View>
@@ -308,8 +336,8 @@ export default function HomeScreen() {
           <SectionHeader title="Pengingat hari ini" actionLabel="Lihat semua" />
           {loading ? (
             <ReminderShimmer />
-          ) : (
-            <View style={{ gap: theme.spacing.md }}>
+          ) : reminders.length > 0 ? (
+            <View style={styles.remindersList}>
               {reminders.map((item) => (
                 <View
                   key={item.id}
@@ -339,6 +367,12 @@ export default function HomeScreen() {
                 </View>
               ))}
             </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <FontAwesome6 name="clock" color={theme.colors.muted} size={48} />
+              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat hari ini</ThemedText>
+              <ThemedText variant="caption" color="muted">Tambahkan pengingat obat untuk melihat jadwal harian</ThemedText>
+            </View>
           )}
         </Surface>
 
@@ -354,13 +388,13 @@ export default function HomeScreen() {
             </View>
           ))}
           <View style={styles.caregiverActions}>
-            <Surface muted padding={true} style={{ flex: 1 }}>
+            <Surface muted padding={true} style={styles.caregiverAction}>
               <View style={styles.actionContent}>
                 <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
                 <ThemedText variant="caption">Riwayat konsumsi</ThemedText>
               </View>
             </Surface>
-            <Surface muted padding={true} style={{ flex: 1 }}>
+            <Surface muted padding={true} style={styles.caregiverAction}>
               <View style={styles.actionContent}>
                 <FontAwesome6 name="stethoscope" color={theme.colors.accent} size={16} />
                 <ThemedText>Konsultasi klinik</ThemedText>
@@ -369,11 +403,32 @@ export default function HomeScreen() {
           </View>
         </Surface>
       </ScrollView>
+
+      <ConfirmMedicationModal
+        visible={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={() => handleConfirmMedication()}
+        medicationName={nextReminder?.title}
+      />
+
+      <AddMedicationModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddMedication}
+        medication={newMedication}
+        onMedicationChange={setNewMedication}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   hero: {
     padding: 24,
     borderRadius: 24,
@@ -382,10 +437,19 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 16,
   },
+  heroHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  heroTitle: {
+    color: "white",
+  },
   heroSubtitle: {
-    color: "rgba(255,255,255,0.9)",
+    color: "rgba(255,255,255,0.95)",
     fontSize: 16,
     lineHeight: 24,
+    fontFamily: "Geist",
   },
   heroTags: {
     flexDirection: "row",
@@ -398,6 +462,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
+  nextDoseContent: {
+    flex: 1,
+  },
+  nextDoseTime: {
+    alignItems: "flex-end",
+  },
   pillIcon: {
     width: 52,
     height: 52,
@@ -406,6 +476,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.1)",
   },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 32,
+  },
+  emptyStateTitle: {
+    marginTop: 16,
+  },
   primaryButton: {
     backgroundColor: "#0F172A",
     paddingVertical: 14,
@@ -413,8 +490,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryButtonText: {
-    color: "white",
+    color: "#FFFFFF",
     fontWeight: "600",
+    fontSize: 15,
   },
   timelineRow: {
     flexDirection: "row",
@@ -431,6 +509,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "rgba(226,232,240,0.4)",
+  },
+  timelineBar: {
+    borderRadius: 12,
+    width: "100%",
+  },
+  timelineLabel: {
+    marginTop: 8,
+  },
+  remindersList: {
+    gap: 14,
   },
   reminderRow: {
     flexDirection: "row",
@@ -458,16 +546,16 @@ const styles = StyleSheet.create({
     fontFamily: "Geist",
   },
   scheduled: {
-    backgroundColor: "rgba(30,143,225,0.12)",
-    color: "#1E8FE1",
+    backgroundColor: "rgba(30,143,225,0.15)",
+    color: "#3DA5F5",
   },
   taken: {
-    backgroundColor: "rgba(12,186,135,0.12)",
-    color: "#00C48C",
+    backgroundColor: "rgba(12,186,135,0.15)",
+    color: "#10D99D",
   },
   missed: {
-    backgroundColor: "rgba(255,107,107,0.12)",
-    color: "#FF6B6B",
+    backgroundColor: "rgba(255,107,107,0.15)",
+    color: "#FF8585",
   },
   caregiverRow: {
     flexDirection: "row",
@@ -478,6 +566,9 @@ const styles = StyleSheet.create({
   caregiverActions: {
     flexDirection: "row",
     gap: 12,
+  },
+  caregiverAction: {
+    flex: 1,
   },
   actionContent: {
     flexDirection: "row",

@@ -27,7 +27,6 @@ export default function TabsLayout() {
           fontWeight: "500",
           fontSize: 11,
           fontFamily: theme.typography.fontFamily,
-          marginTop: 4,
         },
       }}
     >

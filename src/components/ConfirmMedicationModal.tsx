@@ -1,0 +1,111 @@
+import { FontAwesome6 } from "@expo/vector-icons";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+
+import { useTheme } from "../theme";
+import { ThemedText } from "./ui";
+
+interface ConfirmMedicationModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  medicationName?: string;
+}
+
+export function ConfirmMedicationModal({
+  visible,
+  onClose,
+  onConfirm,
+  medicationName,
+}: ConfirmMedicationModalProps) {
+  const { theme } = useTheme();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable
+          style={[styles.modalContent, { backgroundColor: theme.colors.card }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.iconContainer}>
+            <FontAwesome6 name="circle-check" color={theme.colors.success} size={64} />
+          </View>
+          <ThemedText variant="heading" weight="700" style={styles.title}>
+            Konfirmasi Minum Obat
+          </ThemedText>
+          <ThemedText color="secondary" style={styles.subtitle}>
+            Apakah Anda sudah minum obat {medicationName}?
+          </ThemedText>
+          <View style={styles.buttonContainer}>
+            <Pressable
+              style={[styles.button, { backgroundColor: theme.colors.cardMuted }]}
+              onPress={onClose}
+            >
+              <ThemedText weight="600">Belum</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.button, { backgroundColor: theme.colors.success }]}
+              onPress={onConfirm}
+            >
+              <Text style={styles.confirmButtonText}>Sudah</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    borderRadius: 24,
+    padding: 32,
+    width: "100%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  iconContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  subtitle: {
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmButtonText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 15,
+    fontFamily: "Geist",
+  },
+});
