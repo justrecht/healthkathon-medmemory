@@ -1,7 +1,7 @@
+import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { ReactNode, useState } from "react";
-import { FaArrowLeft, FaBell, FaLink, FaPalette, FaShieldHalved } from "react-icons/fa6";
 import { Pressable, ScrollView, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -32,7 +32,7 @@ export default function SettingsScreen() {
           },
           headerLeft: () => (
             <Pressable onPress={() => router.back()} hitSlop={12}>
-              <FaArrowLeft color={theme.colors.textPrimary} size={22} />
+              <FontAwesome6 name="arrow-left" color={theme.colors.textPrimary} size={18} />
             </Pressable>
           ),
         }}
@@ -41,9 +41,9 @@ export default function SettingsScreen() {
         <Surface>
           <SectionHeader title="Tampilan" subtitle="Mode terang / gelap" />
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <View style={{ flex: 1, marginRight: 16 }}>
-              <ThemedText weight="600">Mode gelap</ThemedText>
-              <ThemedText color="muted">
+            <View style={{ flex: 1, marginRight: 14 }}>
+              <ThemedText weight="500">Mode gelap</ThemedText>
+              <ThemedText variant="caption" color="muted">
                 {mode === "dark"
                   ? "Mengurangi silau & hemat baterai"
                   : "Visual cerah untuk pagi hari"}
@@ -56,13 +56,13 @@ export default function SettingsScreen() {
         <Surface>
           <SectionHeader title="Pengingat" subtitle="Notifikasi Mobile JKN" />
           <SettingToggle
-            icon={<FaBell color={theme.colors.accent} size={20} />}
+            icon={<FontAwesome6 name="bell" color={theme.colors.accent} size={16} />}
             title="Notifikasi sebelum jadwal"
             description="Dikirim 30 menit sebelumnya"
             initialValue
           />
           <SettingToggle
-            icon={<FaPalette color={theme.colors.accent} size={20} />}
+            icon={<FontAwesome6 name="palette" color={theme.colors.accent} size={16} />}
             title="Ringkas tampilan malam"
             description="Kurangi elemen visual saat jam istirahat"
           />
@@ -71,12 +71,12 @@ export default function SettingsScreen() {
         <Surface>
           <SectionHeader title="Integrasi" subtitle="Konektivitas layanan JKN" />
           <IntegrationCard
-            icon={<FaShieldHalved color="white" size={26} />}
+            icon={<FontAwesome6 name="shield-halved" color="white" size={20} />}
             title="Prolanis"
             subtitle="Sinkron jadwal kontrol & pengingat obat"
           />
           <IntegrationCard
-            icon={<FaLink color="white" size={26} />}
+            icon={<FontAwesome6 name="link" color="white" size={20} />}
             title="Rekam medis elektronik"
             subtitle="Tarik catatan terapi terakhir klinik"
           />

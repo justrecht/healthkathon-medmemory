@@ -1,5 +1,5 @@
+import { FontAwesome6 } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { FaHouse, FaUser } from "react-icons/fa6";
 import { View } from "react-native";
 
 import { useTheme } from "../../src/theme";
@@ -33,7 +33,7 @@ export default function TabsLayout() {
           title: "Beranda",
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
-              <FaHouse color={color} size={size} />
+              <FontAwesome6 name="house" color={color} size={size} />
             </View>
           ),
         }}
@@ -44,7 +44,7 @@ export default function TabsLayout() {
           title: "Profil",
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
-              <FaUser color={color} size={size} />
+              <FontAwesome6 name="user" color={color} size={size} />
             </View>
           ),
         }}

@@ -1,13 +1,6 @@
+import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
-import {
-  FaBell,
-  FaChartLine,
-  FaClock,
-  FaPills,
-  FaShieldHalved,
-  FaStethoscope,
-} from "react-icons/fa6";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -72,7 +65,7 @@ export default function HomeScreen() {
               <ThemedText variant="title" weight="700" style={{ color: "white" }}>
                 MedMemory
               </ThemedText>
-              <FaBell color="white" size={24} />
+              <FontAwesome6 name="bell" color="white" size={24} />
             </View>
             <Text style={styles.heroSubtitle}>Pendamping terapi untuk peserta JKN</Text>
             <View style={styles.heroTags}>
@@ -90,17 +83,17 @@ export default function HomeScreen() {
           />
           <View style={styles.nextDoseRow}>
             <View style={[styles.pillIcon, { backgroundColor: theme.colors.cardMuted }]}>
-              <FaPills color={theme.colors.accent} size={24} />
+              <FontAwesome6 name="pills" color={theme.colors.accent} size={18} />
             </View>
             <View style={{ flex: 1 }}>
-              <ThemedText variant="heading" weight="600">
+              <ThemedText variant="subheading" weight="600">
                 {nextReminder.title}
               </ThemedText>
-              <ThemedText color="secondary">{nextReminder.dosage}</ThemedText>
-              <ThemedText color="muted">{nextReminder.notes}</ThemedText>
+              <ThemedText variant="caption" color="secondary">{nextReminder.dosage}</ThemedText>
+              <ThemedText variant="caption" color="muted">{nextReminder.notes}</ThemedText>
             </View>
-            <View>
-              <ThemedText variant="heading" weight="700">
+            <View style={{ alignItems: "flex-end" }}>
+              <ThemedText variant="subheading" weight="600">
                 {nextReminder.time}
               </ThemedText>
               <ThemedText variant="caption" color="muted">
@@ -111,7 +104,7 @@ export default function HomeScreen() {
           <Pressable
             style={[styles.primaryButton, { backgroundColor: theme.colors.textPrimary }]}
           >
-            <Text style={styles.primaryButtonText}>Konfirmasi minum obat</Text>
+            <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Konfirmasi minum obat</Text>
           </Pressable>
         </Surface>
 
@@ -168,7 +161,7 @@ export default function HomeScreen() {
                       { backgroundColor: theme.colors.cardMuted },
                     ]}
                   >
-                    <FaClock color={theme.colors.accent} size={22} />
+                    <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <ThemedText weight="600">{item.title}</ThemedText>
@@ -188,21 +181,21 @@ export default function HomeScreen() {
           <SectionHeader title="Pemantauan keluarga" subtitle="Caregiver menerima notifikasi" />
           <View style={styles.caregiverRow}>
             <View style={{ flex: 1 }}>
-              <ThemedText weight="600">Rina Mulyani</ThemedText>
-              <ThemedText color="muted">Anak | +62 812-1234-5678</ThemedText>
+              <ThemedText weight="500">Rina Mulyani</ThemedText>
+              <ThemedText variant="caption" color="muted">Anak | +62 812-1234-5678</ThemedText>
             </View>
-            <FaShieldHalved color={theme.colors.success} size={28} />
+            <FontAwesome6 name="shield-halved" color={theme.colors.success} size={20} />
           </View>
           <View style={styles.caregiverActions}>
             <Surface muted padding={true} style={{ flex: 1 }}>
               <View style={styles.actionContent}>
-                <FaChartLine color={theme.colors.accent} size={20} />
-                <ThemedText>Riwayat konsumsi</ThemedText>
+                <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
+                <ThemedText variant="caption">Riwayat konsumsi</ThemedText>
               </View>
             </Surface>
             <Surface muted padding={true} style={{ flex: 1 }}>
               <View style={styles.actionContent}>
-                <FaStethoscope color={theme.colors.accent} size={20} />
+                <FontAwesome6 name="stethoscope" color={theme.colors.accent} size={16} />
                 <ThemedText>Konsultasi klinik</ThemedText>
               </View>
             </Surface>
@@ -259,7 +252,7 @@ const styles = StyleSheet.create({
   timelineRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 8,
   },
   timelineColumn: {
     alignItems: "center",
@@ -267,34 +260,35 @@ const styles = StyleSheet.create({
   },
   timelineBarContainer: {
     width: "100%",
-    height: 96,
-    borderRadius: 16,
+    height: 80,
+    borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "rgba(226,232,240,0.4)",
   },
   reminderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    gap: 16,
-    borderBottomWidth: 1,
+    paddingVertical: 6,
+    gap: 12,
+    borderBottomWidth: 0.5,
   },
   reminderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(30,143,225,0.08)",
   },
   statusChip: {
-    marginTop: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    marginTop: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
     textTransform: "capitalize",
-    fontWeight: "600",
-    fontSize: 12,
+    fontWeight: "500",
+    fontSize: 11,
+    fontFamily: "Geist",
   },
   scheduled: {
     backgroundColor: "rgba(30,143,225,0.12)",

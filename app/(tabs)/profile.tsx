@@ -1,7 +1,7 @@
+import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { FaGear, FaMoon, FaSun, FaUser, FaUserGroup } from "react-icons/fa6";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -41,7 +41,7 @@ export default function ProfileScreen() {
           headerTitleStyle: { color: theme.colors.textPrimary, fontWeight: "600" },
           headerRight: () => (
             <Pressable onPress={() => router.push("/settings" as const)} hitSlop={12}>
-              <FaGear color={theme.colors.textPrimary} size={22} />
+              <FontAwesome6 name="gear" color={theme.colors.textPrimary} size={22} />
             </Pressable>
           ),
         }}
@@ -54,13 +54,13 @@ export default function ProfileScreen() {
             <>
               <View style={styles.userRow}>
                 <View style={[styles.avatar, { backgroundColor: theme.colors.cardMuted }]}>
-                  <FaUser color={theme.colors.accent} size={32} />
+                  <FontAwesome6 name="user" color={theme.colors.accent} size={24} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <ThemedText variant="heading" weight="700">
+                  <ThemedText variant="subheading" weight="600">
                     {userProfile?.name || "Pengguna"}
                   </ThemedText>
-                  <ThemedText color="muted">{userProfile?.program || "Peserta JKN"}</ThemedText>
+                  <ThemedText variant="caption" color="muted">{userProfile?.program || "Peserta JKN"}</ThemedText>
                 </View>
                 <GradientChip label="Level stabil" />
               </View>
@@ -89,11 +89,11 @@ export default function ProfileScreen() {
           <SectionHeader title="Preferensi tampilan" subtitle="Light / Dark mode" />
           <View style={styles.preferenceCard}>
             <LinearGradient colors={theme.colors.gradient} style={styles.preferenceIcon}>
-              {mode === "dark" ? <FaMoon color="white" size={24} /> : <FaSun color="white" size={24} />}
+              <FontAwesome6 name={mode === "dark" ? "moon" : "sun"} color="white" size={18} />
             </LinearGradient>
             <View style={{ flex: 1 }}>
-              <ThemedText weight="600">Mode {mode === "dark" ? "Gelap" : "Terang"}</ThemedText>
-              <ThemedText color="muted">Atur tema pada layar pengaturan</ThemedText>
+              <ThemedText weight="500">Mode {mode === "dark" ? "Gelap" : "Terang"}</ThemedText>
+              <ThemedText variant="caption" color="muted">Atur tema pada layar pengaturan</ThemedText>
             </View>
           </View>
         </Surface>
@@ -149,13 +149,13 @@ type TeamItemProps = {
 function TeamItem({ title, subtitle, indicator }: TeamItemProps) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.teamRow, { borderColor: theme.colors.border }]}> 
+    <View style={[styles.teamRow, { borderColor: theme.colors.border }]}>
       <View style={[styles.teamAvatar, { backgroundColor: theme.colors.cardMuted }]}>
-        <FaUserGroup color={theme.colors.accent} size={20} />
+        <FontAwesome6 name="user-group" color={theme.colors.accent} size={16} />
       </View>
       <View style={{ flex: 1 }}>
-        <ThemedText weight="600">{title}</ThemedText>
-        <ThemedText color="muted">{subtitle}</ThemedText>
+        <ThemedText weight="500">{title}</ThemedText>
+        <ThemedText variant="caption" color="muted">{subtitle}</ThemedText>
       </View>
       <GradientChip label={indicator} />
     </View>
@@ -166,54 +166,54 @@ const styles = StyleSheet.create({
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(30,143,225,0.12)",
   },
   statRow: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 20,
+    gap: 10,
+    marginTop: 16,
   },
   settingsButton: {
-    marginTop: 20,
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    marginTop: 16,
+    borderWidth: 0.5,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   preferenceCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
   preferenceIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
   },
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
+    gap: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 0.5,
   },
   teamAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(30,143,225,0.12)",
