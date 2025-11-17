@@ -102,15 +102,15 @@ function SettingToggle({ icon, title, description, initialValue = false }: Setti
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        paddingVertical: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
         <View
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
             justifyContent: "center",
             alignItems: "center",
             backgroundColor: theme.colors.cardMuted,
@@ -119,8 +119,8 @@ function SettingToggle({ icon, title, description, initialValue = false }: Setti
           {icon}
         </View>
         <View style={{ flex: 1 }}>
-          <ThemedText weight="600">{title}</ThemedText>
-          <ThemedText color="muted">{description}</ThemedText>
+          <ThemedText weight="500">{title}</ThemedText>
+          <ThemedText variant="caption" color="muted">{description}</ThemedText>
         </View>
       </View>
       <Switch value={value} onValueChange={setValue} />
@@ -143,18 +143,18 @@ function IntegrationCard({ icon, title, subtitle }: IntegrationCardProps) {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{
-          borderRadius: theme.radius.lg,
-          padding: theme.spacing.lg,
+          borderRadius: theme.radius.md,
+          padding: theme.spacing.md,
           flexDirection: "row",
           alignItems: "center",
-          gap: 16,
+          gap: 12,
         }}
       >
         <View
           style={{
-            width: 56,
-            height: 56,
-            borderRadius: 28,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
             backgroundColor: "rgba(0,0,0,0.15)",
             alignItems: "center",
             justifyContent: "center",
@@ -163,10 +163,10 @@ function IntegrationCard({ icon, title, subtitle }: IntegrationCardProps) {
           {icon}
         </View>
         <View style={{ flex: 1 }}>
-          <ThemedText weight="600" style={{ color: "white" }}>
+          <ThemedText weight="500" style={{ color: "white", fontFamily: theme.typography.fontFamily }}>
             {title}
           </ThemedText>
-          <ThemedText color="muted" style={{ color: "rgba(255,255,255,0.72)" }}>
+          <ThemedText variant="caption" color="muted" style={{ color: "rgba(255,255,255,0.72)", fontFamily: theme.typography.fontFamily }}>
             {subtitle}
           </ThemedText>
         </View>

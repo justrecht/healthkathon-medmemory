@@ -17,13 +17,15 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.border,
-          height: 72,
-          paddingHorizontal: theme.spacing.lg,
-          paddingBottom: 16,
+          borderTopWidth: 0.5,
+          height: 64,
+          paddingHorizontal: theme.spacing.md,
+          paddingBottom: 12,
         },
         tabBarLabelStyle: {
-          fontWeight: "600",
-          fontSize: 12,
+          fontWeight: "500",
+          fontSize: 11,
+          fontFamily: theme.typography.fontFamily,
         },
       }}
     >

@@ -38,7 +38,7 @@ export function Surface({
           borderColor: theme.colors.border,
         },
         style,
-      ]
+      ]}
     >
       {children}
     </View>
