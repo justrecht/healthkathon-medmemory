@@ -49,26 +49,26 @@ export type Theme = {
 };
 
 const spacing = {
-  xs: 8,
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 28,
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
 };
 
 const radius = {
-  sm: 10,
-  md: 16,
-  lg: 24,
-  pill: 64,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 50,
 };
 
 const typography = {
-  title: 32,
-  heading: 24,
-  subheading: 18,
-  body: 16,
-  caption: 13,
+  title: 24,
+  heading: 18,
+  subheading: 15,
+  body: 14,
+  caption: 11,
   fontFamily: "Geist",
 };
 

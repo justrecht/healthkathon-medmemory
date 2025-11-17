@@ -1,11 +1,6 @@
-// MongoDB Data API endpoint - replace with your actual Data API URL
-// For now using mock data until backend API is set up
-// To enable real MongoDB: deploy a serverless function or use MongoDB Atlas Data API
+const API_BASE_URL = "https://your-api-endpoint.com/api";
+const USE_MOCK_DATA = true;
 
-const API_BASE_URL = "https://your-api-endpoint.com/api"; // Replace with actual backend
-const USE_MOCK_DATA = true; // Set to false when backend is ready
-
-// Mock data for development
 const mockReminders = [
   {
     id: "1",

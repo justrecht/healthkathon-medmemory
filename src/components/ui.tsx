@@ -32,13 +32,13 @@ export function Surface({
       style={[
         {
           backgroundColor: muted ? theme.colors.cardMuted : theme.colors.card,
-          borderRadius: theme.radius.lg,
-          padding: padding ? theme.spacing.lg : 0,
-          borderWidth: 1,
+          borderRadius: theme.radius.md,
+          padding: padding ? theme.spacing.md : 0,
+          borderWidth: 0.5,
           borderColor: theme.colors.border,
         },
         style,
-      ]}
+      ]
     >
       {children}
     </View>
@@ -114,11 +114,11 @@ export function SectionHeader({ title, subtitle, actionLabel, onActionPress }: S
       }}
     >
       <View style={{ flex: 1 }}>
-        <ThemedText variant="heading" weight="600">
+        <ThemedText variant="subheading" weight="600">
           {title}
         </ThemedText>
         {subtitle ? (
-          <ThemedText variant="caption" color="muted" style={{ marginTop: 4 }}>
+          <ThemedText variant="caption" color="muted" style={{ marginTop: 2 }}>
             {subtitle}
           </ThemedText>
         ) : null}
@@ -128,7 +128,9 @@ export function SectionHeader({ title, subtitle, actionLabel, onActionPress }: S
           <Text
             style={{
               color: theme.colors.accent,
-              fontWeight: "600",
+              fontWeight: "500",
+              fontSize: theme.typography.caption,
+              fontFamily: theme.typography.fontFamily,
             }}
           >
             {actionLabel}
@@ -152,16 +154,16 @@ export function GradientChip({ label, icon }: GradientChipProps) {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={{
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.xs,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: theme.spacing.xs - 2,
         borderRadius: theme.radius.pill,
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
+        gap: 4,
       }}
     >
       {icon}
-      <Text style={{ color: "white", fontWeight: "600" }}>{label}</Text>
+      <Text style={{ color: "white", fontWeight: "500", fontSize: 11, fontFamily: theme.typography.fontFamily }}>{label}</Text>
     </LinearGradient>
   );
 }
@@ -179,12 +181,12 @@ export function MetricBadge({ label, value, trend }: MetricBadgeProps) {
       <ThemedText variant="caption" color="muted">
         {label}
       </ThemedText>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
-        <ThemedText variant="heading" weight="700">
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 6 }}>
+        <ThemedText variant="subheading" weight="600">
           {value}
         </ThemedText>
         {trend ? (
-          <Text style={{ color: theme.colors.success, fontWeight: "600" }}>{trend}</Text>
+          <Text style={{ color: theme.colors.success, fontWeight: "500", fontSize: 11, fontFamily: theme.typography.fontFamily }}>{trend}</Text>
         ) : null}
       </View>
     </View>
@@ -200,7 +202,7 @@ export function ProgressBar({ value }: ProgressBarProps) {
   return (
     <View
       style={{
-        height: 8,
+        height: 4,
         borderRadius: theme.radius.pill,
         backgroundColor: theme.colors.cardMuted,
         overflow: "hidden",
