@@ -1,281 +1,305 @@
-import {
-    AlarmClockIcon,
-    Calendar01Icon,
-    MedicineBottle01Icon,
-    ReminderIcon,
-} from "@hugeicons/react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+    Activity,
+    BellRing,
+    Clock4,
+    Pill,
+    ShieldCheck,
+    Stethoscope,
+} from "lucide-react-native";
+import {
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Card } from "../../src/components/Card";
-import { SectionHeader } from "../../src/components/SectionHeader";
-import { adherenceHighlights, caregiverAlerts, todaysReminders } from "../../src/data/mockData";
-import type { AppTheme } from "../../src/theme";
+import {
+    GradientChip,
+    SectionHeader,
+    Surface,
+    ThemedText
+} from "../../src/components/ui";
+import { reminders } from "../../src/data/reminders";
 import { useTheme } from "../../src/theme";
+
+const adherence = [
+  { label: "Sen", value: 92 },
+  { label: "Sel", value: 94 },
+  { label: "Rab", value: 88 },
+  { label: "Kam", value: 96 },
+  { label: "Jum", value: 91 },
+  { label: "Sab", value: 89 },
+  { label: "Min", value: 95 },
+];
 
 export default function HomeScreen() {
   const { theme } = useTheme();
+  const nextReminder = reminders[1];
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={styles.wrapper}>
-        <LinearGradient colors={theme.gradient} style={styles.hero}>
-          <Text style={styles.heroLabel}>MedMemory</Text>
-          <Text style={styles.heroTitle}>Pengingat obat terintegrasi Prolanis</Text>
-          <Text style={styles.heroSubtitle}>
-            Jadwalkan terapi, catat kepatuhan, dan kirim update otomatis ke keluarga serta faskes JKN.
-          </Text>
-          <View style={styles.heroBadges}>
-            <View style={styles.badge}>
-              <AlarmClockIcon color="#FFFFFF" size={20} variant="stroke" />
-              <Text style={styles.badgeText}>3 pengingat hari ini</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <ScrollView
+        contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Surface padding={false}>
+          <LinearGradient
+            colors={theme.colors.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.hero}
+          >
+            <View style={{ flexDirection: "row", justifyContent: "space-between", width: "100%" }}>
+              <ThemedText variant="title" weight="700" style={{ color: "white" }}>
+                MedMemory
+              </ThemedText>
+              <BellRing color="white" />
             </View>
-            <View style={styles.badge}>
-              <Calendar01Icon color="#FFFFFF" size={20} variant="stroke" />
-              <Text style={styles.badgeText}>Sinkron Prolanis</Text>
+            <Text style={styles.heroSubtitle}>Pendamping terapi untuk peserta JKN</Text>
+            <View style={styles.heroTags}>
+              <GradientChip label="Kepatuhan 94%" />
+              <GradientChip label="3 pengingat aktif" />
+            </View>
+          </LinearGradient>
+        </Surface>
+
+        <Surface>
+          <SectionHeader
+            title="Dosis berikutnya"
+            subtitle="Sinkron dengan jadwal Prolanis"
+            actionLabel="Detail"
+          />
+          <View style={styles.nextDoseRow}>
+            <View style={[styles.pillIcon, { backgroundColor: theme.colors.cardMuted }]}>
+              <Pill color={theme.colors.accent} size={24} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="heading" weight="600">
+                {nextReminder.title}
+              </ThemedText>
+              <ThemedText color="secondary">{nextReminder.dosage}</ThemedText>
+              <ThemedText color="muted">{nextReminder.notes}</ThemedText>
+            </View>
+            <View>
+              <ThemedText variant="heading" weight="700">
+                {nextReminder.time}
+              </ThemedText>
+              <ThemedText variant="caption" color="muted">
+                hari ini
+              </ThemedText>
             </View>
           </View>
-        </LinearGradient>
+          <Pressable
+            style={[styles.primaryButton, { backgroundColor: theme.colors.textPrimary }]}
+          >
+            <Text style={styles.primaryButtonText}>Konfirmasi minum obat</Text>
+          </Pressable>
+        </Surface>
 
-        <Card style={styles.statsCard}>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.text }]}>{adherenceHighlights.adherencePercent}%</Text>
-              <Text style={[styles.statLabel, { color: theme.subtext }]}>Kepatuhan Minggu Ini</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.text }]}>{adherenceHighlights.streakDays} hari</Text>
-              <Text style={[styles.statLabel, { color: theme.subtext }]}>Streak tertib minum obat</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.text }]}>{adherenceHighlights.missedThisWeek}</Text>
-              <Text style={[styles.statLabel, { color: theme.subtext }]}>Obat terlewat</Text>
-            </View>
+        <Surface>
+          <SectionHeader title="Timeline terapi" subtitle="Catatan konsumsi 7 hari" />
+          <View style={styles.timelineRow}>
+            {adherence.map((day) => (
+              <View key={day.label} style={styles.timelineColumn}>
+                <View
+                  style={[
+                    styles.timelineBarContainer,
+                    { backgroundColor: theme.colors.cardMuted },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={theme.colors.gradient}
+                    start={{ x: 0, y: 1 }}
+                    end={{ x: 0, y: 0 }}
+                    style={{
+                      height: `${day.value}%`,
+                      borderRadius: theme.radius.md,
+                      width: "100%",
+                    }}
+                  />
+                </View>
+                <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>
+                  {day.label}
+                </ThemedText>
+              </View>
+            ))}
           </View>
-        </Card>
+        </Surface>
 
-        <SectionHeader title="Jadwal Hari Ini" subtitle="Notifikasi sebelum, saat, dan setelah jadwal" actionLabel="Lihat semua" onPressAction={() => {}} />
-        <Card>
-          {todaysReminders.map((reminder, index) => {
-            const isLast = index === todaysReminders.length - 1;
-            return (
+        <Surface>
+          <SectionHeader title="Pengingat hari ini" actionLabel="Lihat semua" />
+          <View style={{ gap: theme.spacing.md }}>
+            {reminders.map((item) => (
               <View
-                key={reminder.id}
-                style={[styles.reminderRow, !isLast && { borderBottomColor: theme.border, borderBottomWidth: 1 }]}
+                key={item.id}
+                style={[
+                  styles.reminderRow,
+                  {
+                    borderColor: theme.colors.border,
+                  },
+                ]}
               >
-                <View style={styles.reminderIcon}>
-                  <MedicineBottle01Icon color={theme.accent} size={28} variant="stroke" />
+                <View
+                  style={[
+                    styles.reminderIcon,
+                    { backgroundColor: theme.colors.cardMuted },
+                  ]}
+                >
+                  <Clock4 color={theme.colors.accent} size={22} />
                 </View>
-                <View style={styles.reminderMeta}>
-                  <Text style={[styles.reminderName, { color: theme.text }]}>{reminder.name}</Text>
-                  <Text style={[styles.reminderDosage, { color: theme.subtext }]}>
-                    {reminder.dosage} • {reminder.notes ?? "Tanpa catatan"}
-                  </Text>
+                <View style={{ flex: 1 }}>
+                  <ThemedText weight="600">{item.title}</ThemedText>
+                  <ThemedText color="muted">{item.notes}</ThemedText>
                 </View>
-                <View style={styles.reminderStatus}>
-                  <Text style={[styles.reminderTime, { color: theme.text }]}>{reminder.time}</Text>
-                  <View style={[styles.statusBadge, getStatusStyles(reminder.status, theme)]}>
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: theme.name === "dark" ? theme.text : "#0F172A" },
-                      ]}
-                    >
-                      {formatStatus(reminder.status)}
-                    </Text>
-                  </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <ThemedText>{item.time}</ThemedText>
+                  <Text style={[styles.statusChip, styles[item.status]]}>{item.status}</Text>
                 </View>
               </View>
-            );
-          })}
-        </Card>
+            ))}
+          </View>
+        </Surface>
 
-        <SectionHeader title="Alert Caregiver" subtitle="Keluarga dan faskes menerima update otomatis" />
-        <Card>
-          {caregiverAlerts.map((alert, index) => (
-            <View
-              key={alert.id}
-              style={[styles.caregiverRow, index !== caregiverAlerts.length - 1 && { borderBottomColor: theme.border, borderBottomWidth: 1 }]}
-            >
-              <View style={styles.caregiverIcon}>
-                <ReminderIcon color={theme.accent} size={22} variant="stroke" />
-              </View>
-              <View style={styles.caregiverMeta}>
-                <Text style={[styles.caregiverName, { color: theme.text }]}>{alert.name}</Text>
-                <Text style={[styles.caregiverRelation, { color: theme.subtext }]}>{alert.relation}</Text>
-              </View>
-              <View style={styles.caregiverStatus}>
-                <Text style={[styles.caregiverNote, { color: theme.text }]}>{alert.status}</Text>
-                <Text style={[styles.caregiverTime, { color: theme.subtext }]}>{alert.timestamp}</Text>
-              </View>
+        <Surface>
+          <SectionHeader title="Pemantauan keluarga" subtitle="Caregiver menerima notifikasi" />
+          <View style={styles.caregiverRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText weight="600">Rina Mulyani</ThemedText>
+              <ThemedText color="muted">Anak | +62 812-1234-5678</ThemedText>
             </View>
-          ))}
-        </Card>
-      </View>
-    </ScrollView>
+            <ShieldCheck color={theme.colors.success} size={28} />
+          </View>
+          <View style={styles.caregiverActions}>
+            <Surface muted padding={true} style={{ flex: 1 }}>
+              <View style={styles.actionContent}>
+                <Activity color={theme.colors.accent} size={20} />
+                <ThemedText>Riwayat konsumsi</ThemedText>
+              </View>
+            </Surface>
+            <Surface muted padding={true} style={{ flex: 1 }}>
+              <View style={styles.actionContent}>
+                <Stethoscope color={theme.colors.accent} size={20} />
+                <ThemedText>Konsultasi klinik</ThemedText>
+              </View>
+            </Surface>
+          </View>
+        </Surface>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-function formatStatus(status: string) {
-  if (status === "taken") return "Selesai";
-  if (status === "missed") return "Terlewat";
-  return "Terjadwal";
-}
-
-function getStatusStyles(status: "scheduled" | "taken" | "missed", theme: AppTheme) {
-  if (status === "taken") {
-    return { backgroundColor: theme.pill, borderColor: "transparent" };
-  }
-
-  if (status === "missed") {
-    return { backgroundColor: "rgba(240, 68, 56, 0.12)", borderColor: "transparent" };
-  }
-
-  return { backgroundColor: "rgba(10, 139, 255, 0.12)", borderColor: "transparent" };
-}
-
 const styles = StyleSheet.create({
-  wrapper: {
-    padding: 20,
-    gap: 20,
-  },
   hero: {
-    borderRadius: 28,
     padding: 24,
-  },
-  heroLabel: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  heroTitle: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    fontWeight: "700",
-    marginTop: 4,
+    borderRadius: 24,
+    minHeight: 160,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    gap: 16,
   },
   heroSubtitle: {
     color: "rgba(255,255,255,0.9)",
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 24,
   },
-  heroBadges: {
+  heroTags: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 18,
+    flexWrap: "wrap",
   },
-  badge: {
+  nextDoseRow: {
     flexDirection: "row",
+    gap: 16,
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    marginBottom: 16,
   },
-  badgeText: {
-    color: "#FFFFFF",
+  pillIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  primaryButton: {
+    backgroundColor: "#0F172A",
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: "white",
     fontWeight: "600",
-    fontSize: 13,
   },
-  statsCard: {
-    padding: 18,
-  },
-  statsRow: {
+  timelineRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 12,
   },
-  statItem: {
+  timelineColumn: {
+    alignItems: "center",
     flex: 1,
   },
-  statValue: {
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  statLabel: {
-    fontSize: 13,
-    marginTop: 4,
+  timelineBarContainer: {
+    width: "100%",
+    height: 96,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "rgba(226,232,240,0.4)",
   },
   reminderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    gap: 14,
+    paddingVertical: 8,
+    gap: 16,
+    borderBottomWidth: 1,
   },
   reminderIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(20, 216, 114, 0.12)",
+    backgroundColor: "rgba(30,143,225,0.08)",
   },
-  reminderMeta: {
-    flex: 1,
-  },
-  reminderName: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  reminderDosage: {
-    fontSize: 13,
+  statusChip: {
     marginTop: 4,
-  },
-  reminderStatus: {
-    alignItems: "flex-end",
-  },
-  reminderTime: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  statusBadge: {
-    marginTop: 6,
-    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-  },
-  statusText: {
-    color: "#0F172A",
-    fontSize: 12,
+    borderRadius: 12,
+    textTransform: "capitalize",
     fontWeight: "600",
+    fontSize: 12,
+  },
+  scheduled: {
+    backgroundColor: "rgba(30,143,225,0.12)",
+    color: "#1E8FE1",
+  },
+  taken: {
+    backgroundColor: "rgba(12,186,135,0.12)",
+    color: "#00C48C",
+  },
+  missed: {
+    backgroundColor: "rgba(255,107,107,0.12)",
+    color: "#FF6B6B",
   },
   caregiverRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    marginBottom: 16,
     gap: 12,
   },
-  caregiverIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    justifyContent: "center",
+  caregiverActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionContent: {
+    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(10, 139, 255, 0.12)",
-  },
-  caregiverMeta: {
-    flex: 1,
-  },
-  caregiverName: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  caregiverRelation: {
-    fontSize: 13,
-    marginTop: 3,
-  },
-  caregiverStatus: {
-    flex: 1,
-  },
-  caregiverNote: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  caregiverTime: {
-    fontSize: 12,
-    marginTop: 4,
-    textAlign: "right",
+    gap: 12,
   },
 });

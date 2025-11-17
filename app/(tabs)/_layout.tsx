@@ -1,9 +1,7 @@
 import { Tabs } from "expo-router";
+import { Home, UserRound } from "lucide-react-native";
+import { View } from "react-native";
 
-import {
-    Home01Icon,
-    UserCircleIcon,
-} from "@hugeicons/react-native";
 import { useTheme } from "../../src/theme";
 
 export default function TabsLayout() {
@@ -13,18 +11,19 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.accent,
-        tabBarInactiveTintColor: theme.subtext,
+        tabBarShowLabel: true,
+        tabBarActiveTintColor: theme.colors.textPrimary,
+        tabBarInactiveTintColor: theme.colors.muted,
         tabBarStyle: {
-          backgroundColor: theme.card,
-          borderTopColor: theme.border,
-          height: 70,
-          paddingBottom: 10,
-          paddingTop: 10,
+          backgroundColor: theme.colors.card,
+          borderTopColor: theme.colors.border,
+          height: 72,
+          paddingHorizontal: theme.spacing.lg,
+          paddingBottom: 16,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
           fontWeight: "600",
+          fontSize: 12,
         },
       }}
     >
@@ -33,7 +32,9 @@ export default function TabsLayout() {
         options={{
           title: "Beranda",
           tabBarIcon: ({ color, size }) => (
-            <Home01Icon color={color} size={size} variant="stroke" />
+            <View style={{ alignItems: "center" }}>
+              <Home color={color} size={size} />
+            </View>
           ),
         }}
       />
@@ -42,7 +43,9 @@ export default function TabsLayout() {
         options={{
           title: "Profil",
           tabBarIcon: ({ color, size }) => (
-            <UserCircleIcon color={color} size={size} variant="stroke" />
+            <View style={{ alignItems: "center" }}>
+              <UserRound color={color} size={size} />
+            </View>
           ),
         }}
       />
