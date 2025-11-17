@@ -1,50 +1,48 @@
-# Welcome to your Expo app 👋
+# MedMemory - Pengingat Terapi Peserta JKN
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+MedMemory adalah MVP mobile app untuk Healthkathon JKN yang membantu peserta terapi rutin (mis. Prolanis) menjaga kepatuhan minum obat, berbagi progres kepada keluarga, dan menyederhanakan integrasi dengan layanan JKN yang sudah ada. Aplikasi ini dibangun menggunakan Expo Router, React Native 0.81, MongoDB sebagai database, dan desain minimalis dengan dukungan mode terang/gelap.
 
-## Get started
+## Fitur Utama
 
-1. Install dependencies
+- **Dashboard kepatuhan** - Hero card dengan jadwal dosis berikutnya, progres timeline 7 hari, dan daftar pengingat harian yang diambil dari database MongoDB.
+- **Pemantauan keluarga & care team** - Bagian khusus untuk caregiver dan tenaga kesehatan agar mudah memantau pasien dengan data real-time.
+- **Profil peserta** - Statistik Prolanis, ringkasan kunjungan klinik, dan akses cepat ke pengaturan melalui header button.
+- **Halaman pengaturan** - Tombol ganti tema (dark mode memakai #0E0E0E dengan warna secondary yang lebih lembut di light mode), kontrol notifikasi, dan kartu integrasi layanan JKN.
+- **Navigasi tab modern** - Bottom tabs berbasis `@react-navigation/bottom-tabs` dengan ikon dari `lucide-react-native`.
+- **Shimmer loading states** - Skeleton loader yang elegan saat mengambil data dari database untuk UX yang lebih baik.
+- **Tipografi Geist** - Custom font Geist untuk tampilan modern dan profesional.
 
-   ```bash
-   npm install
-   ```
+## Struktur Proyek
 
-2. Start the app
+- `app/` - Rute file-based (home, profile, settings, dan konfigurasi tabs/stack).
+- `src/theme/` - Context theme dengan token warna, tipografi Geist, dan gradient biru-hijau yang disesuaikan.
+- `src/components/` - Komponen UI tematik (Surface, SectionHeader, GradientChip, ProgressBar, shimmer loaders, dsb.).
+- `src/services/` - MongoDB connection layer dan data fetching functions.
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Menjalankan Aplikasi
 
 ```bash
-npm run reset-project
+npm install --legacy-peer-deps
+npm run lint   # opsional tapi direkomendasikan
+npm start      # membuka Expo DevTools
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Setelah `npm start`, Anda bisa membuka aplikasi via **Expo Go**, emulator Android/iOS, atau development build sesuai kebutuhan healthkathon.
 
-## Learn more
+## Database MongoDB
 
-To learn more about developing your project with Expo, look at the following resources:
+Aplikasi terhubung ke MongoDB Atlas cluster:
+- **Connection String**: `mongodb+srv://s22210335_db_user:0hN3RhniEt26nNsD@medmemory-db.bgd0e16.mongodb.net/?appName=medmemory-db`
+- **Database Name**: `medmemory`
+- **Collections**: `reminders`, `users`, `caregivers`
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Data ditarik secara real-time dengan shimmer loading states untuk pengalaman yang smooth.
 
-## Join the community
+## Catatan Pengembangan
 
-Join our community of developers creating universal apps.
+- Tema default mengikuti mode sistem, tetapi pengguna dapat mengganti mode lewat layar Settings.
+- Semua warna sekunder menggunakan gradient hijau → biru yang disesuaikan untuk light mode (#16A085 → #2874A6) agar tidak terlalu terang.
+- Font Geist diload via expo-font dan diterapkan secara global melalui theme context.
+- Untuk memperluas fitur (mis. push notifications atau offline sync), tambahkan service baru di `src/services/` dan injeksikan lewat hooks/context.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Selamat bereksperimen dan semoga sukses di Healthkathon JKN!

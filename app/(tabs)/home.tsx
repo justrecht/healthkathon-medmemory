@@ -1,28 +1,24 @@
 import { LinearGradient } from "expo-linear-gradient";
 import {
-    Activity,
-    BellRing,
-    Clock4,
-    Pill,
-    ShieldCheck,
-    Stethoscope,
+  Activity,
+  BellRing,
+  Clock4,
+  Pill,
+  ShieldCheck,
+  Stethoscope,
 } from "lucide-react-native";
-import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
-} from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-    GradientChip,
-    SectionHeader,
-    Surface,
-    ThemedText
+  GradientChip,
+  SectionHeader,
+  Surface,
+  ThemedText,
 } from "../../src/components/ui";
-import { reminders } from "../../src/data/reminders";
+import { getReminders } from "../../src/services/api";
 import { useTheme } from "../../src/theme";
 
 const adherence = [
@@ -37,7 +33,27 @@ const adherence = [
 
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const nextReminder = reminders[1];
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getReminders()
+      .then((data) => {
+        setReminders(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch reminders:", err);
+        setLoading(false);
+      });
+  }, []);
+
+  const nextReminder = reminders[0] || {
+    title: "Belum ada pengingat",
+    time: "--:--",
+    dosage: "-",
+    notes: "Tambahkan pengingat pertama Anda",
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -101,6 +117,7 @@ export default function HomeScreen() {
 
         <Surface>
           <SectionHeader title="Timeline terapi" subtitle="Catatan konsumsi 7 hari" />
+          {/* Compact histogram so pasien dapat memantau pola kepatuhan mingguan */}
           <View style={styles.timelineRow}>
             {adherence.map((day) => (
               <View key={day.label} style={styles.timelineColumn}>
@@ -131,36 +148,40 @@ export default function HomeScreen() {
 
         <Surface>
           <SectionHeader title="Pengingat hari ini" actionLabel="Lihat semua" />
-          <View style={{ gap: theme.spacing.md }}>
-            {reminders.map((item) => (
-              <View
-                key={item.id}
-                style={[
-                  styles.reminderRow,
-                  {
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
+          {loading ? (
+            <ReminderShimmer />
+          ) : (
+            <View style={{ gap: theme.spacing.md }}>
+              {reminders.map((item) => (
                 <View
+                  key={item.id}
                   style={[
-                    styles.reminderIcon,
-                    { backgroundColor: theme.colors.cardMuted },
+                    styles.reminderRow,
+                    {
+                      borderColor: theme.colors.border,
+                    },
                   ]}
                 >
-                  <Clock4 color={theme.colors.accent} size={22} />
+                  <View
+                    style={[
+                      styles.reminderIcon,
+                      { backgroundColor: theme.colors.cardMuted },
+                    ]}
+                  >
+                    <Clock4 color={theme.colors.accent} size={22} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText weight="600">{item.title}</ThemedText>
+                    <ThemedText color="muted">{item.notes}</ThemedText>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <ThemedText>{item.time}</ThemedText>
+                    <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText weight="600">{item.title}</ThemedText>
-                  <ThemedText color="muted">{item.notes}</ThemedText>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <ThemedText>{item.time}</ThemedText>
-                  <Text style={[styles.statusChip, styles[item.status]]}>{item.status}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </Surface>
 
         <Surface>

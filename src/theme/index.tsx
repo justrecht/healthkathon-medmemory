@@ -44,6 +44,7 @@ export type Theme = {
     subheading: number;
     body: number;
     caption: number;
+    fontFamily: string;
   };
 };
 
@@ -68,6 +69,7 @@ const typography = {
   subheading: 18,
   body: 16,
   caption: 13,
+  fontFamily: "Geist",
 };
 
 const lightTheme: Theme = {
@@ -82,8 +84,8 @@ const lightTheme: Theme = {
     success: "#00C48C",
     warning: "#FFB347",
     danger: "#FF6B6B",
-    gradient: ["#2CD9C5", "#1E8FE1"],
-    accent: "#1E8FE1",
+    gradient: ["#16A085", "#2874A6"],
+    accent: "#2874A6",
   },
   spacing,
   radius,
@@ -123,6 +125,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [mode, setMode] = useState<ThemeMode>("light");
 
   useEffect(() => {
+    // Align initial mode with current system preference so the UI does not flicker.
     const systemScheme = Appearance.getColorScheme();
     if (systemScheme === "dark" || systemScheme === "light") {
       setMode(systemScheme);

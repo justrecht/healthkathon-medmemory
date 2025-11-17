@@ -85,6 +85,7 @@ export function ThemedText({
           fontSize: size,
           color: palette[color],
           fontWeight: weight,
+          fontFamily: theme.typography.fontFamily,
         },
         style,
       ]}
