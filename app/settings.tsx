@@ -1,8 +1,7 @@
 import { FontAwesome6 } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { ReactNode, useState } from "react";
-import { Pressable, ScrollView, Switch, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SectionHeader, Surface, ThemedText } from "../src/components/ui";
@@ -11,10 +10,21 @@ import { ThemeMode, useTheme } from "../src/theme";
 export default function SettingsScreen() {
   const { theme, mode, setMode } = useTheme();
   const router = useRouter();
+  const [notificationSettings, setNotificationSettings] = useState({
+    beforeSchedule: true,
+  });
+  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
 
-  const handleThemeToggle = (value: boolean) => {
-    const nextMode: ThemeMode = value ? "dark" : "light";
-    setMode(nextMode);
+  const handleThemeChange = (selectedMode: ThemeMode) => {
+    setMode(selectedMode);
+    setShowThemeDropdown(false);
+  };
+
+  const handleNotificationToggle = (setting: keyof typeof notificationSettings) => {
+    setNotificationSettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting]
+    }));
   };
 
   return (
@@ -41,49 +51,68 @@ export default function SettingsScreen() {
       />
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
         <Surface>
-          <SectionHeader title="Tampilan" subtitle="Mode terang / gelap" />
+          <SectionHeader title="Tampilan" subtitle="Pilih tema aplikasi" />
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <View style={{ flex: 1, marginRight: 14 }}>
-              <ThemedText weight="500">Mode gelap</ThemedText>
+              <ThemedText weight="500">Mode tema</ThemedText>
               <ThemedText variant="caption" color="muted">
-                {mode === "dark"
-                  ? "Mengurangi silau & hemat baterai"
-                  : "Visual cerah untuk pagi hari"}
+                {mode === "dark" 
+                  ? "Mode gelap aktif" 
+                  : "Mode terang aktif"}
               </ThemedText>
             </View>
-            <Switch value={mode === "dark"} onValueChange={handleThemeToggle} />
+            <Pressable 
+              style={[styles.dropdownButton, { backgroundColor: theme.colors.cardMuted, borderColor: theme.colors.border }]}
+              onPress={() => setShowThemeDropdown(true)}
+            >
+              <ThemedText style={{ fontSize: 14 }}>
+                {mode === "dark" ? "Gelap" : "Terang"}
+              </ThemedText>
+              <FontAwesome6 name="chevron-down" size={12} color={theme.colors.textSecondary} />
+            </Pressable>
           </View>
         </Surface>
 
         <Surface>
-          <SectionHeader title="Pengingat" subtitle="Notifikasi Mobile JKN" />
+          <SectionHeader title="Pengingat" subtitle="Notifikasi pengingat obat" />
           <SettingToggle
             icon={<FontAwesome6 name="bell" color={theme.colors.accent} size={16} />}
             title="Notifikasi sebelum jadwal"
             description="Dikirim 30 menit sebelumnya"
-            initialValue
-          />
-          <SettingToggle
-            icon={<FontAwesome6 name="palette" color={theme.colors.accent} size={16} />}
-            title="Ringkas tampilan malam"
-            description="Kurangi elemen visual saat jam istirahat"
-          />
-        </Surface>
-
-        <Surface>
-          <SectionHeader title="Integrasi" subtitle="Konektivitas layanan JKN" />
-          <IntegrationCard
-            icon={<FontAwesome6 name="shield-halved" color="white" size={20} />}
-            title="Prolanis"
-            subtitle="Sinkron jadwal kontrol & pengingat obat"
-          />
-          <IntegrationCard
-            icon={<FontAwesome6 name="link" color="white" size={20} />}
-            title="Rekam medis elektronik"
-            subtitle="Tarik catatan terapi terakhir klinik"
+            value={notificationSettings.beforeSchedule}
+            onValueChange={() => handleNotificationToggle('beforeSchedule')}
           />
         </Surface>
       </ScrollView>
+      
+      <Modal
+        visible={showThemeDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowThemeDropdown(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay} 
+          onPress={() => setShowThemeDropdown(false)}
+        >
+          <View style={[styles.dropdownModal, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Pressable
+              style={[styles.dropdownItem, mode === "light" && { backgroundColor: theme.colors.cardMuted }]}
+              onPress={() => handleThemeChange("light")}
+            >
+              <FontAwesome6 name="sun" size={16} color={theme.colors.accent} />
+              <ThemedText weight={mode === "light" ? "600" : "400"}>Terang</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.dropdownItem, mode === "dark" && { backgroundColor: theme.colors.cardMuted }]}
+              onPress={() => handleThemeChange("dark")}
+            >
+              <FontAwesome6 name="moon" size={16} color={theme.colors.accent} />
+              <ThemedText weight={mode === "dark" ? "600" : "400"}>Gelap</ThemedText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -92,12 +121,12 @@ type SettingToggleProps = {
   icon: ReactNode;
   title: string;
   description: string;
-  initialValue?: boolean;
+  value: boolean;
+  onValueChange: () => void;
 };
 
-function SettingToggle({ icon, title, description, initialValue = false }: SettingToggleProps) {
+function SettingToggle({ icon, title, description, value, onValueChange }: SettingToggleProps) {
   const { theme } = useTheme();
-  const [value, setValue] = useState(initialValue);
   return (
     <View
       style={{
@@ -125,54 +154,47 @@ function SettingToggle({ icon, title, description, initialValue = false }: Setti
           <ThemedText variant="caption" color="muted">{description}</ThemedText>
         </View>
       </View>
-      <Switch value={value} onValueChange={setValue} />
+      <Switch value={value} onValueChange={onValueChange} />
     </View>
   );
 }
 
-type IntegrationCardProps = {
-  icon: ReactNode;
-  title: string;
-  subtitle: string;
-};
-
-function IntegrationCard({ icon, title, subtitle }: IntegrationCardProps) {
-  const { theme } = useTheme();
-  return (
-    <Surface muted>
-      <LinearGradient
-        colors={theme.colors.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          borderRadius: theme.radius.md,
-          padding: theme.spacing.md,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: "rgba(0,0,0,0.15)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {icon}
-        </View>
-        <View style={{ flex: 1 }}>
-          <ThemedText weight="500" style={{ color: "white", fontFamily: theme.typography.fontFamily }}>
-            {title}
-          </ThemedText>
-          <ThemedText variant="caption" color="muted" style={{ color: "rgba(255,255,255,0.72)", fontFamily: theme.typography.fontFamily }}>
-            {subtitle}
-          </ThemedText>
-        </View>
-      </LinearGradient>
-    </Surface>
-  );
-}
+const styles = StyleSheet.create({
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    minWidth: 100,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownModal: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 8,
+    minWidth: 150,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 12,
+  },
+});

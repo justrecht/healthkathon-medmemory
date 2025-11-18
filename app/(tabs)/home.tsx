@@ -2,30 +2,32 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AddMedicationModal } from "../../src/components/AddMedicationModal";
 import { ConfirmMedicationModal } from "../../src/components/ConfirmMedicationModal";
+import { CustomAlert } from "../../src/components/CustomAlert";
+import { MedicationHistoryModal } from "../../src/components/MedicationHistoryModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-  GradientChip,
-  SectionHeader,
-  Surface,
-  ThemedText,
+    GradientChip,
+    SectionHeader,
+    Surface,
+    ThemedText,
 } from "../../src/components/ui";
-import { confirmMedication, getCaregivers, getReminders, updateReminderStatus } from "../../src/services/api";
+import { confirmMedication, createReminder, getCaregivers, getReminders, updateReminderStatus } from "../../src/services/api";
 import {
-  addNotificationResponseListener,
-  registerForPushNotifications,
-  scheduleReminderNotification,
-  sendCaregiverNotification,
+    addNotificationResponseListener,
+    registerForPushNotifications,
+    scheduleReminderNotification,
+    sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
-  calculateAdherence,
-  getDailyAdherence,
-  saveMedicationRecord,
-  type MedicationRecord,
+    calculateAdherence,
+    getDailyAdherence,
+    saveMedicationRecord,
+    type MedicationRecord,
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
@@ -40,13 +42,20 @@ export default function HomeScreen() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMedication, setNewMedication] = useState({ title: "", dosage: "", time: "", notes: "" });
+  const [medicationHistory, setMedicationHistory] = useState<MedicationRecord[]>([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [customAlert, setCustomAlert] = useState<{
+    visible: boolean;
+    title?: string;
+    message?: string;
+    buttons?: Array<{text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive"}>;
+    icon?: keyof typeof FontAwesome6.glyphMap;
+    iconColor?: string;
+  }>({ visible: false });
 
   useEffect(() => {
     // Request notification permissions
     registerForPushNotifications();
-
-    // Load initial data
-    loadData();
 
     // Set up notification response listener
     const subscription = addNotificationResponseListener((response) => {
@@ -55,24 +64,48 @@ export default function HomeScreen() {
       
       if (type === "ontime" || type === "after") {
         // Navigate to confirmation or show alert
-        Alert.alert(
+        showAlert(
           "Konfirmasi Minum Obat",
-          "Apakah Anda sudah minum obat?",
+          "Udah minum obatnya belum?",
           [
             { text: "Belum", style: "cancel" },
-            { text: "Sudah", onPress: () => handleConfirmMedication(medicationId) },
-          ]
+            { text: "Udah", onPress: () => handleConfirmMedication(medicationId), style: "default" },
+          ],
+          "pills",
+          "#2874A6"
         );
       }
     });
 
-    // Schedule notifications for all reminders
-    scheduleAllNotifications();
+    // Load initial data
+    loadData();
 
     return () => {
       subscription.remove();
     };
   }, []);
+
+  // Schedule notifications when reminders change
+  useEffect(() => {
+    if (reminders.length > 0) {
+      scheduleAllNotifications();
+    }
+  }, [reminders]);
+
+  const showAlert = (title: string, message: string, buttons?: Array<{text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive"}>, icon?: keyof typeof FontAwesome6.glyphMap, iconColor?: string) => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      buttons: buttons || [{ text: "OK" }],
+      icon,
+      iconColor,
+    });
+  };
+
+  const closeAlert = () => {
+    setCustomAlert({ visible: false });
+  };
 
   async function loadData() {
     try {
@@ -91,6 +124,10 @@ export default function HomeScreen() {
         setAdherenceData(dailyData);
       }
 
+      // Load medication history from storage
+      // In a real app, this would be fetched from storage or API
+      setMedicationHistory([]);
+
       const activeCount = remindersData.filter((r: any) => r.status === "scheduled").length;
       setActiveRemindersCount(activeCount);
 
@@ -103,8 +140,7 @@ export default function HomeScreen() {
 
   async function scheduleAllNotifications() {
     try {
-      const remindersData = await getReminders();
-      for (const reminder of remindersData) {
+      for (const reminder of reminders) {
         if (reminder.status === "scheduled") {
           await scheduleReminderNotification({
             id: reminder.id,
@@ -122,7 +158,13 @@ export default function HomeScreen() {
 
   async function handleAddMedication() {
     if (!newMedication.title || !newMedication.dosage || !newMedication.time) {
-      Alert.alert("Error", "Mohon lengkapi semua field yang diperlukan");
+      showAlert(
+        "Error", 
+        "Isi dulu semua field yang diperlukan ya",
+        [{ text: "OK" }],
+        "triangle-exclamation",
+        "#FF8585"
+      );
       return;
     }
 
@@ -135,12 +177,37 @@ export default function HomeScreen() {
       status: "scheduled",
     };
 
+    // Save to backend
+    await createReminder(newReminder);
+    
+    // Update local state
     setReminders((prev) => [...prev, newReminder]);
     await scheduleReminderNotification(newReminder);
     
     setNewMedication({ title: "", dosage: "", time: "", notes: "" });
     setShowAddModal(false);
-    Alert.alert("Berhasil", "Pengingat obat berhasil ditambahkan!");
+    showAlert(
+      "Berhasil", 
+      "Pengingat obat udah berhasil ditambahkan!",
+      [{ text: "OK" }],
+      "check-circle",
+      "#10D99D"
+    );
+  }
+
+  async function handleViewHistory() {
+    try {
+      setShowHistoryModal(true);
+    } catch (error) {
+      console.error("Error viewing history:", error);
+      showAlert(
+        "Error", 
+        "Gagal memuat riwayat konsumsi nih",
+        [{ text: "OK" }],
+        "triangle-exclamation",
+        "#FF8585"
+      );
+    }
   }
 
   async function handleConfirmMedication(medicationId?: string) {
@@ -170,6 +237,9 @@ export default function HomeScreen() {
           confirmedBy: "user",
         };
         await saveMedicationRecord(record);
+        
+        // Update local history state
+        setMedicationHistory(prev => [record, ...prev]);
       }
 
       // Update UI
@@ -189,7 +259,13 @@ export default function HomeScreen() {
       // Success handled by modal close
     } catch (error) {
       console.error("Error confirming medication:", error);
-      Alert.alert("Error", "Gagal mengonfirmasi konsumsi obat");
+      showAlert(
+        "Error", 
+        "Gagal konfirmasi konsumsi obat nih",
+        [{ text: "OK" }],
+        "triangle-exclamation",
+        "#FF8585"
+      );
     }
   }
 
@@ -249,8 +325,8 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.heroSubtitle}>Pendamping terapi untuk peserta JKN</Text>
             <View style={styles.heroTags}>
-              <GradientChip label={`Kepatuhan ${adherencePercentage}%`} />
-              <GradientChip label={`${activeRemindersCount} pengingat aktif`} />
+              <GradientChip label={`Konsistensi ${adherencePercentage}%`} />
+              <GradientChip label={`${activeRemindersCount} pengingat`} />
             </View>
           </LinearGradient>
         </Surface>
@@ -258,7 +334,7 @@ export default function HomeScreen() {
         <Surface>
           <SectionHeader
             title="Dosis berikutnya"
-            subtitle="Sinkron dengan jadwal Prolanis"
+            subtitle="Tambahkan jika belum ada"
             actionLabel="Tambah"
             onActionPress={() => setShowAddModal(true)}
           />
@@ -288,48 +364,56 @@ export default function HomeScreen() {
                 style={[styles.primaryButton, { backgroundColor: theme.colors.accent }]}
                 onPress={() => setShowConfirmModal(true)}
               >
-                <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Konfirmasi minum obat</Text>
+                <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Udah minum obat</Text>
               </Pressable>
             </>
           ) : (
             <View style={styles.emptyState}>
               <FontAwesome6 name="calendar-plus" color={theme.colors.muted} size={48} />
-              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat</ThemedText>
-              <ThemedText variant="caption" color="muted">Tambahkan pengingat pertama Anda</ThemedText>
+              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat nih</ThemedText>
+              <ThemedText variant="caption" color="muted">Yuk, tambahin pengingat pertama kamu</ThemedText>
             </View>
           )}
         </Surface>
 
         <Surface>
-          <SectionHeader title="Timeline terapi" subtitle="Catatan konsumsi 7 hari" />
-          {/* Compact histogram so pasien dapat memantau pola kepatuhan mingguan */}
-          <View style={styles.timelineRow}>
-            {adherenceData.map((day) => (
-              <View key={day.label} style={styles.timelineColumn}>
-                <View
-                  style={[
-                    styles.timelineBarContainer,
-                    { backgroundColor: theme.colors.cardMuted },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={theme.colors.gradient}
-                    start={{ x: 0, y: 1 }}
-                    end={{ x: 0, y: 0 }}
+          <SectionHeader title="Timeline konsumsi" subtitle="Catatan konsumsi 7 hari" />
+          {adherenceData.length > 0 ? (
+            /* Compact histogram so pasien dapat memantau pola kepatuhan mingguan */
+            <View style={styles.timelineRow}>
+              {adherenceData.map((day) => (
+                <View key={day.label} style={styles.timelineColumn}>
+                  <View
                     style={[
-                      styles.timelineBar,
-                      {
-                        height: `${day.value}%`,
-                      },
+                      styles.timelineBarContainer,
+                      { backgroundColor: theme.colors.cardMuted },
                     ]}
-                  />
+                  >
+                    <LinearGradient
+                      colors={theme.colors.gradient}
+                      start={{ x: 0, y: 1 }}
+                      end={{ x: 0, y: 0 }}
+                      style={[
+                        styles.timelineBar,
+                        {
+                          height: `${day.value}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <ThemedText variant="caption" color="muted" style={styles.timelineLabel}>
+                    {day.label}
+                  </ThemedText>
                 </View>
-                <ThemedText variant="caption" color="muted" style={styles.timelineLabel}>
-                  {day.label}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <FontAwesome6 name="chart-line" color={theme.colors.muted} size={48} />
+              <ThemedText color="muted" style={styles.emptyStateTitle}>Yah, belum ada data, nih!</ThemedText>
+              <ThemedText variant="caption" color="muted">Mulai minum obat buat lihat timeline konsumsi</ThemedText>
+            </View>
+          )}
         </Surface>
 
         <Surface>
@@ -370,8 +454,8 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.emptyState}>
               <FontAwesome6 name="clock" color={theme.colors.muted} size={48} />
-              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat hari ini</ThemedText>
-              <ThemedText variant="caption" color="muted">Tambahkan pengingat obat untuk melihat jadwal harian</ThemedText>
+              <ThemedText color="muted" style={styles.emptyStateTitle}>Yah, belum ada data, nih!</ThemedText>
+              <ThemedText variant="caption" color="muted">Tambahin pengingat obat buat lihat jadwal harian</ThemedText>
             </View>
           )}
         </Surface>
@@ -388,18 +472,14 @@ export default function HomeScreen() {
             </View>
           ))}
           <View style={styles.caregiverActions}>
-            <Surface muted padding={true} style={styles.caregiverAction}>
-              <View style={styles.actionContent}>
-                <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
-                <ThemedText variant="caption">Riwayat konsumsi</ThemedText>
-              </View>
-            </Surface>
-            <Surface muted padding={true} style={styles.caregiverAction}>
-              <View style={styles.actionContent}>
-                <FontAwesome6 name="stethoscope" color={theme.colors.accent} size={16} />
-                <ThemedText>Konsultasi klinik</ThemedText>
-              </View>
-            </Surface>
+            <Pressable onPress={handleViewHistory}>
+              <Surface muted padding={true} style={styles.caregiverAction}>
+                <View style={styles.actionContent}>
+                  <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
+                  <ThemedText variant="caption">Riwayat konsumsi</ThemedText>
+                </View>
+              </Surface>
+            </Pressable>
           </View>
         </Surface>
       </ScrollView>
@@ -417,6 +497,22 @@ export default function HomeScreen() {
         onAdd={handleAddMedication}
         medication={newMedication}
         onMedicationChange={setNewMedication}
+      />
+
+      <MedicationHistoryModal
+        visible={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        medicationHistory={medicationHistory}
+      />
+
+      <CustomAlert
+        visible={customAlert.visible}
+        title={customAlert.title}
+        message={customAlert.message}
+        buttons={customAlert.buttons}
+        icon={customAlert.icon}
+        iconColor={customAlert.iconColor}
+        onClose={closeAlert}
       />
     </SafeAreaView>
   );
@@ -569,6 +665,7 @@ const styles = StyleSheet.create({
   },
   caregiverAction: {
     flex: 1,
+    maxWidth: 200,
   },
   actionContent: {
     flexDirection: "row",
