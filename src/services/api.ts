@@ -31,99 +31,103 @@ const API_BASE_URL = getApiUrl();
 
 console.log('API Base URL:', API_BASE_URL);
 
+// Medications API
 export async function getReminders() {
   try {
-    const response = await fetch(`${API_BASE_URL}/reminders`);
-    if (!response.ok) throw new Error("Failed to fetch reminders");
-    return await response.json();
+    // Get medications for a specific user (you can pass userId as parameter)
+    const userId = "6739a7e8f5c4d2a1b8e9f012"; // Replace with actual user ID from auth
+    const response = await fetch(`${API_BASE_URL}/medications/user/${userId}`);
+    if (!response.ok) throw new Error("Failed to fetch medications");
+    const medications = await response.json();
+    
+    // Transform medications to match the expected format
+    return medications.map((med: any) => ({
+      id: med._id,
+      title: med.name,
+      dosage: med.dosage,
+      time: med.reminderTimes?.[0] || "09:00",
+      notes: med.notes || med.instructions || "",
+      status: med.isActive ? "scheduled" : "missed",
+      frequency: med.frequency,
+      startDate: med.startDate,
+      endDate: med.endDate,
+    }));
   } catch (error) {
-    console.error("Error fetching reminders:", error);
+    console.error("Error fetching medications:", error);
     // Return empty array when API is not available
     return [];
   }
 }
 
 export async function createReminder(medication: {
-  id: string;
+  id?: string;
   title: string;
   dosage: string;
   time: string;
   notes: string;
   status: string;
+  userId?: string;
 }) {
   try {
-    const response = await fetch(`${API_BASE_URL}/reminders`, {
+    const userId = medication.userId || "6739a7e8f5c4d2a1b8e9f012"; // Replace with actual user ID from auth
+    
+    const medicationData = {
+      userId,
+      name: medication.title,
+      dosage: medication.dosage,
+      frequency: "daily", // Default frequency
+      startDate: new Date().toISOString(),
+      instructions: medication.notes,
+      reminderTimes: [medication.time],
+      isActive: medication.status === "scheduled",
+      notes: medication.notes,
+    };
+    
+    const response = await fetch(`${API_BASE_URL}/medications`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(medication),
+      body: JSON.stringify(medicationData),
     });
-    if (!response.ok) throw new Error("Failed to create reminder");
-    return await response.json();
+    if (!response.ok) throw new Error("Failed to create medication");
+    const newMed = await response.json();
+    
+    // Transform response to match expected format
+    return {
+      id: newMed._id,
+      title: newMed.name,
+      dosage: newMed.dosage,
+      time: newMed.reminderTimes?.[0] || medication.time,
+      notes: newMed.notes || "",
+      status: newMed.isActive ? "scheduled" : "missed",
+    };
   } catch (error) {
-    console.error("Error creating reminder:", error);
+    console.error("Error creating medication:", error);
     // Return the medication for offline usage
     return medication;
   }
 }
 
-export async function getUserProfile() {
+export async function recordMedicationHistory(medicationId: string, status: "taken" | "missed") {
   try {
-    const response = await fetch(`${API_BASE_URL}/user/profile`);
-    if (!response.ok) throw new Error("Failed to fetch user profile");
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching user profile:", error);
-    // Return empty profile when API is not available
-    return {
-      name: "",
-      program: "",
-      adherence: "0%",
-      activeMeds: "0",
-      visits: "0",
+    const userId = "6739a7e8f5c4d2a1b8e9f012"; // Replace with actual user ID from auth
+    
+    const historyData = {
+      userId,
+      takenAt: new Date().toISOString(),
+      scheduledTime: new Date().toTimeString().slice(0, 5),
+      status,
+      notes: status === "taken" ? "Taken" : "Missed",
     };
-  }
-}
-
-export async function getCaregivers() {
-  try {
-    const response = await fetch(`${API_BASE_URL}/caregivers`);
-    if (!response.ok) throw new Error("Failed to fetch caregivers");
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching caregivers:", error);
-    // Return empty array when API is not available
-    return [];
-  }
-}
-
-export async function confirmMedication(medicationId: string) {
-  try {
-    const response = await fetch(`${API_BASE_URL}/medications/${medicationId}/confirm`, {
+    
+    const response = await fetch(`${API_BASE_URL}/medications/${medicationId}/history`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmedAt: new Date().toISOString() }),
+      body: JSON.stringify(historyData),
     });
-    if (!response.ok) throw new Error("Failed to confirm medication");
+    if (!response.ok) throw new Error("Failed to record medication history");
     return await response.json();
   } catch (error) {
-    console.error("Error confirming medication:", error);
-    // Return success for offline usage
-    return { success: true, confirmedAt: new Date().toISOString() };
-  }
-}
-
-export async function updateReminderStatus(reminderId: string, status: "taken" | "missed" | "scheduled") {
-  try {
-    const response = await fetch(`${API_BASE_URL}/reminders/${reminderId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (!response.ok) throw new Error("Failed to update reminder");
-    return await response.json();
-  } catch (error) {
-    console.error("Error updating reminder:", error);
-    // Return success for offline usage
-    return { success: true };
+    console.error("Error recording medication history:", error);
+    return { success: true, takenAt: new Date().toISOString() };
   }
 }

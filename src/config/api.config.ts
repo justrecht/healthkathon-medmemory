@@ -19,5 +19,5 @@ export const API_CONFIG = {
   COMPUTER_IP: "192.168.1.2",
   
   // Backend port
-  PORT: 8000,
+  PORT: 3000,
 };
