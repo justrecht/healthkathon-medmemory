@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { clearScheduledNotifications, getScheduledNotifications, saveScheduledNotifications } from "./storage";
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -12,7 +13,16 @@ Notifications.setNotificationHandler({
 });
 
 // Keep track of scheduled notifications to prevent duplicates
-const scheduledNotifications = new Map<string, string[]>();
+let scheduledNotifications = new Map<string, string[]>();
+let isInitialized = false;
+
+// Initialize from storage
+async function initializeScheduledNotifications() {
+  if (isInitialized) return;
+  scheduledNotifications = await getScheduledNotifications();
+  isInitialized = true;
+  console.log(`Loaded ${scheduledNotifications.size} medication notification records from storage`);
+}
 
 export async function registerForPushNotifications() {
   if (Platform.OS === "android") {
@@ -53,10 +63,28 @@ export async function scheduleReminderNotification(
     notes?: string;
   }
 ) {
-  // Cancel existing notifications for this medication to prevent duplicates
+  // Initialize from storage if not done yet
+  await initializeScheduledNotifications();
+
+  // Check if notifications are already scheduled for this medication
   const existing = scheduledNotifications.get(medication.id);
-  if (existing) {
-    console.log(`Cancelling existing notifications for ${medication.id}`);
+  if (existing && existing.length > 0) {
+    // Verify if these notifications actually exist
+    const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const existingIds = allScheduled.map(n => n.identifier);
+    const stillValid = existing.filter(id => existingIds.includes(id));
+    
+    if (stillValid.length > 0) {
+      console.log(`Notifications already scheduled for ${medication.id}, skipping...`);
+      return {
+        beforeNotificationId: stillValid[0],
+        onTimeNotificationId: stillValid[1],
+        afterNotificationId: stillValid[2],
+      };
+    }
+    
+    // If none are valid, cancel and reschedule
+    console.log(`Stale notifications found for ${medication.id}, rescheduling...`);
     for (const notifId of existing) {
       await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
     }
@@ -138,8 +166,10 @@ export async function scheduleReminderNotification(
   notificationIds.push(afterNotificationId);
   console.log(`Scheduled after notification: ${afterNotificationId}`);
 
-  // Store the notification IDs
+  // Store the notification IDs in memory and persist to storage
   scheduledNotifications.set(medication.id, notificationIds);
+  await saveScheduledNotifications(scheduledNotifications);
+  console.log(`Saved ${notificationIds.length} notification IDs to storage for ${medication.id}`);
 
   return {
     beforeNotificationId: notificationIds[0],
@@ -153,18 +183,24 @@ export async function cancelNotification(notificationId: string) {
 }
 
 export async function cancelMedicationNotifications(medicationId: string) {
+  await initializeScheduledNotifications();
+  
   const existing = scheduledNotifications.get(medicationId);
   if (existing) {
     for (const notifId of existing) {
       await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
     }
     scheduledNotifications.delete(medicationId);
+    await saveScheduledNotifications(scheduledNotifications);
+    console.log(`Cancelled and removed notifications for ${medicationId}`);
   }
 }
 
 export async function cancelAllNotifications() {
   await Notifications.cancelAllScheduledNotificationsAsync();
   scheduledNotifications.clear();
+  await clearScheduledNotifications();
+  console.log("Cancelled all notifications and cleared storage");
 }
 
 export async function sendCaregiverNotification(

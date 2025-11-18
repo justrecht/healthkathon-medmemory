@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   CAREGIVERS: "@caregivers",
   NOTIFICATION_SETTINGS: "@notification_settings",
   UI_SETTINGS: "@ui_settings",
+  SCHEDULED_NOTIFICATIONS: "@scheduled_notifications",
 };
 
 export type MedicationRecord = {
@@ -123,6 +124,41 @@ export async function getUISettings(): Promise<UISettings> {
     return {
       beforeSchedule: true,
     };
+  }
+}
+
+// Scheduled Notifications Tracking
+export async function saveScheduledNotifications(notifications: Map<string, string[]>): Promise<boolean> {
+  try {
+    const obj = Object.fromEntries(notifications);
+    await AsyncStorage.setItem(STORAGE_KEYS.SCHEDULED_NOTIFICATIONS, JSON.stringify(obj));
+    return true;
+  } catch (error) {
+    console.error("Error saving scheduled notifications:", error);
+    return false;
+  }
+}
+
+export async function getScheduledNotifications(): Promise<Map<string, string[]>> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.SCHEDULED_NOTIFICATIONS);
+    if (!data) return new Map();
+    
+    const obj = JSON.parse(data);
+    return new Map(Object.entries(obj));
+  } catch (error) {
+    console.error("Error getting scheduled notifications:", error);
+    return new Map();
+  }
+}
+
+export async function clearScheduledNotifications(): Promise<boolean> {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.SCHEDULED_NOTIFICATIONS);
+    return true;
+  } catch (error) {
+    console.error("Error clearing scheduled notifications:", error);
+    return false;
   }
 }
 
