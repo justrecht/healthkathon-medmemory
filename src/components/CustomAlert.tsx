@@ -50,17 +50,22 @@ export function CustomAlert({
       <View style={styles.overlay}>
         <View style={[styles.alertContainer, { backgroundColor: theme.colors.card }]}>
           {icon && (
-            <View style={styles.iconContainer}>
+            <View style={[
+              styles.iconContainer,
+              iconColor === "#10D99D" && { backgroundColor: "rgba(16, 217, 157, 0.12)" },
+              iconColor === "#FF8585" && { backgroundColor: "rgba(255, 133, 133, 0.12)" },
+              iconColor === "#2874A6" && { backgroundColor: "rgba(40, 116, 166, 0.12)" },
+            ]}>
               <FontAwesome6 
                 name={icon} 
-                size={32} 
+                size={36} 
                 color={iconColor || theme.colors.accent} 
               />
             </View>
           )}
           
           {title && (
-            <ThemedText variant="subheading" weight="600" style={styles.title}>
+            <ThemedText variant="subheading" weight="700" style={styles.title}>
               {title}
             </ThemedText>
           )}
@@ -75,11 +80,12 @@ export function CustomAlert({
             {buttons.map((button, index) => (
               <Pressable
                 key={index}
-                style={[
+                style={({ pressed }) => [
                   styles.button,
                   button.style === "cancel" && { backgroundColor: theme.colors.cardMuted },
                   button.style === "destructive" && { backgroundColor: "#FF3B30" },
                   button.style === "default" && { backgroundColor: theme.colors.accent },
+                  pressed && { opacity: 0.8 },
                 ]}
                 onPress={() => handleButtonPress(button)}
               >
@@ -105,37 +111,45 @@ export function CustomAlert({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
   alertContainer: {
     width: "100%",
-    maxWidth: 320,
-    borderRadius: 20,
-    padding: 24,
+    maxWidth: 340,
+    borderRadius: 24,
+    padding: 28,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 10,
+      height: 12,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 12,
   },
   iconContainer: {
-    marginBottom: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(16, 217, 157, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
   },
   title: {
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 10,
+    fontSize: 20,
   },
   message: {
     textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: 28,
+    lineHeight: 22,
+    fontSize: 15,
   },
   buttonContainer: {
     flexDirection: "row",
@@ -144,10 +158,12 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 50,
   },
   buttonText: {
     fontWeight: "600",

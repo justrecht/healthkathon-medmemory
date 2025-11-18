@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   REMINDERS: "@reminders",
   CAREGIVERS: "@caregivers",
   NOTIFICATION_SETTINGS: "@notification_settings",
+  UI_SETTINGS: "@ui_settings",
 };
 
 export type MedicationRecord = {
@@ -24,6 +25,10 @@ export type NotificationSettings = {
   afterTime: number; // minutes after
   enableCaregiver: boolean;
   caregiverDelay: number; // minutes to wait before notifying caregiver
+};
+
+export type UISettings = {
+  beforeSchedule: boolean; // Enable notifications 30 minutes before schedule
 };
 
 // Medication History
@@ -74,21 +79,54 @@ export async function updateMedicationRecord(id: string, updates: Partial<Medica
   }
 }
 
-// Calculate adherence percentage
+// Calculate adherence percentage (assumes 3 medications per day)
 export async function calculateAdherence(days: number = 7): Promise<number> {
   try {
     const history = await getMedicationHistory(days);
-    if (history.length === 0) return 0;
     
+    // Expected: 3 medications per day
+    const expectedTotal = days * 3;
     const takenCount = history.filter((r) => r.status === "taken").length;
-    return Math.round((takenCount / history.length) * 100);
+    
+    if (expectedTotal === 0) return 0;
+    
+    return Math.round((takenCount / expectedTotal) * 100);
   } catch (error) {
     console.error("Error calculating adherence:", error);
     return 0;
   }
 }
 
-// Get daily adherence for chart
+// UI Settings
+export async function saveUISettings(settings: UISettings): Promise<boolean> {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.UI_SETTINGS, JSON.stringify(settings));
+    return true;
+  } catch (error) {
+    console.error("Error saving UI settings:", error);
+    return false;
+  }
+}
+
+export async function getUISettings(): Promise<UISettings> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.UI_SETTINGS);
+    if (!data) {
+      // Default settings
+      return {
+        beforeSchedule: true,
+      };
+    }
+    return JSON.parse(data);
+  } catch (error) {
+    console.error("Error getting UI settings:", error);
+    return {
+      beforeSchedule: true,
+    };
+  }
+}
+
+// Get daily adherence for chart (assumes 3 medications per day)
 export async function getDailyAdherence(days: number = 7): Promise<Array<{ label: string; value: number }>> {
   try {
     const history = await getMedicationHistory(days);
@@ -96,26 +134,23 @@ export async function getDailyAdherence(days: number = 7): Promise<Array<{ label
     
     const dayLabels = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
     
-    // Initialize last 7 days
+    // Initialize last 7 days with expected 3 medications per day
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateKey = date.toISOString().split("T")[0];
-      dailyData[dateKey] = { total: 0, taken: 0 };
+      dailyData[dateKey] = { total: 3, taken: 0 }; // Expect 3 per day
     }
     
-    // Count records
+    // Count taken medications
     history.forEach((record) => {
       const dateKey = record.date.split("T")[0];
-      if (dailyData[dateKey]) {
-        dailyData[dateKey].total++;
-        if (record.status === "taken") {
-          dailyData[dateKey].taken++;
-        }
+      if (dailyData[dateKey] && record.status === "taken") {
+        dailyData[dateKey].taken++;
       }
     });
     
-    // Calculate percentages
+    // Calculate percentages based on 3 medications per day
     return Object.keys(dailyData).map((dateKey, index) => {
       const data = dailyData[dateKey];
       const date = new Date(dateKey);
@@ -123,7 +158,7 @@ export async function getDailyAdherence(days: number = 7): Promise<Array<{ label
       
       return {
         label: dayLabels[dayIndex],
-        value: data.total === 0 ? 0 : Math.round((data.taken / data.total) * 100),
+        value: Math.round((data.taken / 3) * 100), // Always divide by 3
       };
     });
   } catch (error) {

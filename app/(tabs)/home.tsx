@@ -11,23 +11,22 @@ import { CustomAlert } from "../../src/components/CustomAlert";
 import { MedicationHistoryModal } from "../../src/components/MedicationHistoryModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-    GradientChip,
-    SectionHeader,
-    Surface,
-    ThemedText,
+  GradientChip,
+  SectionHeader,
+  Surface,
+  ThemedText,
 } from "../../src/components/ui";
-import { confirmMedication, createReminder, getCaregivers, getReminders, updateReminderStatus } from "../../src/services/api";
 import {
-    addNotificationResponseListener,
-    registerForPushNotifications,
-    scheduleReminderNotification,
-    sendCaregiverNotification,
+  addNotificationResponseListener,
+  registerForPushNotifications,
+  scheduleReminderNotification,
+  sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
-    calculateAdherence,
-    getDailyAdherence,
-    saveMedicationRecord,
-    type MedicationRecord,
+  calculateAdherence,
+  getDailyAdherence,
+  saveMedicationRecord,
+  type MedicationRecord,
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
@@ -85,12 +84,12 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Schedule notifications when reminders change
+  // Schedule notifications when reminders change (but only once per reminder)
   useEffect(() => {
-    if (reminders.length > 0) {
+    if (reminders.length > 0 && !loading) {
       scheduleAllNotifications();
     }
-  }, [reminders]);
+  }, [reminders.length]); // Only trigger when count changes, not on every reminder update
 
   const showAlert = (title: string, message: string, buttons?: Array<{text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive"}>, icon?: keyof typeof FontAwesome6.glyphMap, iconColor?: string) => {
     setCustomAlert({
@@ -109,28 +108,22 @@ export default function HomeScreen() {
 
   async function loadData() {
     try {
-      const [remindersData, adherencePercent, dailyData, caregiversData] = await Promise.all([
-        getReminders(),
+      const [adherencePercent, dailyData] = await Promise.all([
         calculateAdherence(7),
         getDailyAdherence(7),
-        getCaregivers(),
       ]);
 
-      setReminders(remindersData);
+      // Start with empty data
+      setReminders([]);
       setAdherencePercentage(adherencePercent);
-      setCaregivers(caregiversData);
+      setCaregivers([]);
       
       if (dailyData.length > 0) {
         setAdherenceData(dailyData);
       }
 
-      // Load medication history from storage
-      // In a real app, this would be fetched from storage or API
       setMedicationHistory([]);
-
-      const activeCount = remindersData.filter((r: any) => r.status === "scheduled").length;
-      setActiveRemindersCount(activeCount);
-
+      setActiveRemindersCount(0);
       setLoading(false);
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -140,8 +133,10 @@ export default function HomeScreen() {
 
   async function scheduleAllNotifications() {
     try {
+      console.log(`Scheduling notifications for ${reminders.length} reminders`);
       for (const reminder of reminders) {
         if (reminder.status === "scheduled") {
+          console.log(`Scheduling reminder: ${reminder.title} at ${reminder.time}`);
           await scheduleReminderNotification({
             id: reminder.id,
             title: reminder.title,
@@ -151,13 +146,19 @@ export default function HomeScreen() {
           });
         }
       }
+      console.log("All notifications scheduled successfully");
     } catch (error) {
       console.error("Error scheduling notifications:", error);
     }
   }
 
-  async function handleAddMedication() {
-    if (!newMedication.title || !newMedication.dosage || !newMedication.time) {
+  async function handleAddMedication(medication?: { title: string; dosage: string; time: string; notes: string }) {
+    const medicationData = medication || newMedication;
+    
+    console.log("Adding medication:", medicationData);
+    
+    if (!medicationData.title || !medicationData.dosage || !medicationData.time) {
+      console.log("Validation failed - missing required fields");
       showAlert(
         "Error", 
         "Isi dulu semua field yang diperlukan ya",
@@ -170,29 +171,50 @@ export default function HomeScreen() {
 
     const newReminder = {
       id: `med-${Date.now()}`,
-      title: newMedication.title,
-      dosage: newMedication.dosage,
-      time: newMedication.time,
-      notes: newMedication.notes,
+      title: medicationData.title,
+      dosage: medicationData.dosage,
+      time: medicationData.time,
+      notes: medicationData.notes || "",
       status: "scheduled",
     };
 
-    // Save to backend
-    await createReminder(newReminder);
-    
-    // Update local state
-    setReminders((prev) => [...prev, newReminder]);
-    await scheduleReminderNotification(newReminder);
-    
-    setNewMedication({ title: "", dosage: "", time: "", notes: "" });
-    setShowAddModal(false);
-    showAlert(
-      "Berhasil", 
-      "Pengingat obat udah berhasil ditambahkan!",
-      [{ text: "OK" }],
-      "check-circle",
-      "#10D99D"
-    );
+    console.log("Creating reminder:", newReminder);
+
+    try {
+      // Save locally only
+      console.log("Saving reminder locally");
+      
+      // Close modal first
+      setShowAddModal(false);
+      setNewMedication({ title: "", dosage: "", time: "", notes: "" });
+      
+      // Update local state
+      setReminders((prev) => [...prev, newReminder]);
+      console.log("Updated local state");
+      
+      await scheduleReminderNotification(newReminder);
+      console.log("Scheduled notification");
+      
+      // Show success alert after modal is closed
+      setTimeout(() => {
+        showAlert(
+          "Berhasil", 
+          "Pengingat obat udah berhasil ditambahkan!",
+          [{ text: "OK" }],
+          "check-circle",
+          "#10D99D"
+        );
+      }, 300);
+    } catch (error) {
+      console.error("Error adding medication:", error);
+      showAlert(
+        "Error", 
+        "Gagal menambahkan pengingat. Coba lagi ya!",
+        [{ text: "OK" }],
+        "triangle-exclamation",
+        "#FF8585"
+      );
+    }
   }
 
   async function handleViewHistory() {
@@ -216,12 +238,6 @@ export default function HomeScreen() {
     setShowConfirmModal(false);
 
     try {
-      // Confirm via API
-      await confirmMedication(targetId);
-      
-      // Update local status
-      await updateReminderStatus(targetId, "taken");
-      
       // Save to history
       const reminder = reminders.find((r) => r.id === targetId);
       if (reminder) {

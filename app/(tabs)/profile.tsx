@@ -6,7 +6,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ProfileShimmer } from "../../src/components/shimmer";
 import { GradientChip, Surface, ThemedText } from "../../src/components/ui";
-import { getCaregivers, getUserProfile } from "../../src/services/api";
 import { useTheme } from "../../src/theme";
 
 export default function ProfileScreen() {
@@ -17,16 +16,10 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getUserProfile(), getCaregivers()])
-      .then(([profile, caregiverData]) => {
-        setUserProfile(profile);
-        setCaregivers(caregiverData);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch profile data:", err);
-        setLoading(false);
-      });
+    // Start with empty profile
+    setUserProfile(null);
+    setCaregivers([]);
+    setLoading(false);
   }, []);
 
   return (
@@ -50,6 +43,12 @@ export default function ProfileScreen() {
         <Surface>
           {loading ? (
             <ProfileShimmer />
+          ) : !userProfile ? (
+            <View style={styles.emptyState}>
+              <FontAwesome6 name="user-slash" color={theme.colors.muted} size={48} />
+              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada akun</ThemedText>
+              <ThemedText variant="caption" color="muted">Buat akun dulu buat lihat profil</ThemedText>
+            </View>
           ) : (
             <View style={styles.userRow}>
               <View style={[styles.avatar, { backgroundColor: theme.colors.cardMuted }]}>
@@ -57,31 +56,31 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <ThemedText variant="subheading" weight="600">
-                  {userProfile?.name || "Pengguna"}
+                  {userProfile.name}
                 </ThemedText>
-                <ThemedText variant="caption" color="muted">{userProfile?.program || "Peserta JKN"}</ThemedText>
+                <ThemedText variant="caption" color="muted">{userProfile.program}</ThemedText>
               </View>
               <GradientChip label="Level stabil" />
             </View>
           )}
         </Surface>
 
-        {!loading && (
+        {!loading && userProfile && (
           <Surface>
             <View style={styles.statRow}>
               <StatItem
                 label="Kepatuhan"
-                value={userProfile?.adherence || "0%"}
+                value={userProfile.adherence}
                 caption="7 hari terakhir"
               />
               <StatItem
                 label="Obat aktif"
-                value={userProfile?.activeMeds || "0"}
+                value={userProfile.activeMeds}
                 caption="Terjadwal"
               />
               <StatItem
                 label="Visit klinik"
-                value={userProfile?.visits || "0"}
+                value={userProfile.visits}
                 caption="Bulan ini"
               />
             </View>
@@ -147,6 +146,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(30,143,225,0.12)",
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 32,
+  },
+  emptyStateTitle: {
+    marginTop: 16,
   },
   statRow: {
     flexDirection: "row",

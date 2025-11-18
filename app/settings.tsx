@@ -1,30 +1,43 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SectionHeader, Surface, ThemedText } from "../src/components/ui";
+import { getUISettings, saveUISettings, UISettings } from "../src/services/storage";
 import { ThemeMode, useTheme } from "../src/theme";
 
 export default function SettingsScreen() {
   const { theme, mode, setMode } = useTheme();
   const router = useRouter();
-  const [notificationSettings, setNotificationSettings] = useState({
+  const [notificationSettings, setNotificationSettings] = useState<UISettings>({
     beforeSchedule: true,
   });
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+
+  // Load settings on mount
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    const settings = await getUISettings();
+    setNotificationSettings(settings);
+  };
 
   const handleThemeChange = (selectedMode: ThemeMode) => {
     setMode(selectedMode);
     setShowThemeDropdown(false);
   };
 
-  const handleNotificationToggle = (setting: keyof typeof notificationSettings) => {
-    setNotificationSettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
+  const handleNotificationToggle = async (setting: keyof UISettings) => {
+    const newSettings = {
+      ...notificationSettings,
+      [setting]: !notificationSettings[setting]
+    };
+    setNotificationSettings(newSettings);
+    await saveUISettings(newSettings);
   };
 
   return (
