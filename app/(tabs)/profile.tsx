@@ -232,6 +232,18 @@ export default function ProfileScreen() {
       return;
     }
 
+    // Password strength validation for registration
+    if (isRegistering) {
+      const passwordValid = /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(password);
+      if (!passwordValid) {
+        showAlert(
+          "Password Tidak Memenuhi Syarat",
+          "Password harus minimal 8 karakter, mengandung minimal 1 huruf besar dan 1 angka."
+        );
+        return;
+      }
+    }
+
     setAuthLoading(true);
     let result;
     if (isRegistering) {
