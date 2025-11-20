@@ -54,6 +54,66 @@ export async function registerForPushNotifications() {
   return finalStatus;
 }
 
+// Remove duplicated scheduled notifications across app sessions
+export async function dedupeMedicationNotifications() {
+  await initializeScheduledNotifications();
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    // Group by medicationId + type
+    const groups = new Map<string, Array<{ id: string; date: number }>>();
+    for (const n of all) {
+      const medId = (n.content?.data as any)?.medicationId as string | undefined;
+      const type = (n.content?.data as any)?.type as string | undefined;
+      const dateVal = (n.trigger as any)?.date ? new Date((n.trigger as any).date).getTime() : 0;
+      if (!medId || !type) continue;
+      const key = `${medId}:${type}`;
+      const arr = groups.get(key) || [];
+      arr.push({ id: n.identifier, date: dateVal });
+      groups.set(key, arr);
+    }
+
+    const toKeep = new Set<string>();
+    const toCancel: string[] = [];
+    for (const [key, arr] of groups.entries()) {
+      // Keep the soonest upcoming notification (largest past might be 0); pick max date
+      const sorted = arr.sort((a, b) => a.date - b.date);
+      if (sorted.length > 0) {
+        // keep the latest future or if none, keep the last one
+        const now = Date.now();
+        const future = sorted.filter((x) => x.date >= now);
+        const keep = (future[0] ?? sorted[sorted.length - 1]).id;
+        toKeep.add(keep);
+        for (const s of sorted) {
+          if (s.id !== keep) toCancel.push(s.id);
+        }
+      }
+    }
+
+    // Cancel duplicates
+    for (const id of toCancel) {
+      await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+    }
+
+    if (toCancel.length > 0) {
+      // Rebuild in-memory map from remaining notifications
+      const remaining = await Notifications.getAllScheduledNotificationsAsync();
+      const newMap = new Map<string, string[]>();
+      for (const n of remaining) {
+        const medId = (n.content?.data as any)?.medicationId as string | undefined;
+        if (!medId) continue;
+        const list = newMap.get(medId) || [];
+        list.push(n.identifier);
+        newMap.set(medId, list);
+      }
+      scheduledNotifications = newMap;
+      await saveScheduledNotifications(scheduledNotifications);
+      console.log(`Deduped notifications. Cancelled ${toCancel.length} duplicates.`);
+    }
+  } catch (e) {
+    console.warn("Failed to dedupe notifications", e);
+  }
+}
+
 export async function scheduleReminderNotification(
   medication: {
     id: string;
@@ -65,6 +125,9 @@ export async function scheduleReminderNotification(
 ) {
   // Initialize from storage if not done yet
   await initializeScheduledNotifications();
+
+  // Proactive dedupe before scheduling to avoid bursts when state rehydrates
+  await dedupeMedicationNotifications();
 
   // Check if notifications are already scheduled for this medication
   const existing = scheduledNotifications.get(medication.id);
@@ -90,18 +153,12 @@ export async function scheduleReminderNotification(
     }
   }
 
-  // Parse time (format: "HH:MM") and use GMT+7
+  // Parse time (format: "HH:MM") and use DEVICE LOCAL TIME
   const [hours, minutes] = medication.time.split(":").map(Number);
   const now = new Date();
   const scheduledTime = new Date();
-  
-  // Convert to GMT+7 (UTC+7)
-  const gmtOffset = 7 * 60; // GMT+7 in minutes
-  const localOffset = scheduledTime.getTimezoneOffset();
-  const offsetDiff = gmtOffset + localOffset;
-  
+  // Set local device time directly
   scheduledTime.setHours(hours, minutes, 0, 0);
-  scheduledTime.setMinutes(scheduledTime.getMinutes() + offsetDiff);
 
   // If the time has passed today, schedule for tomorrow
   if (scheduledTime <= now) {

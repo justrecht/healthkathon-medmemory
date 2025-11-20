@@ -31,6 +31,12 @@ export function CustomAlert({
 }: CustomAlertProps) {
   const { theme } = useTheme();
 
+  // Ensure default button style has filled background
+  const resolvedButtons: AlertButton[] = buttons.map((b) => ({
+    style: b.style ?? "default",
+    ...b,
+  }));
+
   const handleButtonPress = (button: AlertButton) => {
     if (button.onPress) {
       button.onPress();
@@ -77,7 +83,7 @@ export function CustomAlert({
           )}
           
           <View style={styles.buttonContainer}>
-            {buttons.map((button, index) => (
+            {resolvedButtons.map((button, index) => (
               <Pressable
                 key={index}
                 style={({ pressed }) => [

@@ -9,6 +9,7 @@ import { AddMedicationModal } from "../../src/components/AddMedicationModal";
 import { ConfirmMedicationModal } from "../../src/components/ConfirmMedicationModal";
 import { CustomAlert } from "../../src/components/CustomAlert";
 import { MedicationHistoryModal } from "../../src/components/MedicationHistoryModal";
+import RemindersModal from "../../src/components/RemindersModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
   GradientChip,
@@ -18,15 +19,22 @@ import {
 } from "../../src/components/ui";
 import {
   addNotificationResponseListener,
+  cancelMedicationNotifications,
+  dedupeMedicationNotifications,
   registerForPushNotifications,
   scheduleReminderNotification,
   sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
   calculateAdherence,
+  createReminder as createReminderInStore,
+  deleteReminder as deleteReminderInStore,
   getDailyAdherence,
+  getMedicationHistory,
+  getReminders as getRemindersFromStore,
   saveMedicationRecord,
-  type MedicationRecord,
+  updateReminder as updateReminderInStore,
+  type MedicationRecord
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
@@ -40,6 +48,9 @@ export default function HomeScreen() {
   const [caregivers, setCaregivers] = useState<any[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedReminderId, setSelectedReminderId] = useState<string | null>(null);
+  const [editMedication, setEditMedication] = useState({ title: "", dosage: "", time: "", notes: "" });
   const [newMedication, setNewMedication] = useState({ title: "", dosage: "", time: "", notes: "" });
   const [medicationHistory, setMedicationHistory] = useState<MedicationRecord[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -51,10 +62,13 @@ export default function HomeScreen() {
     icon?: keyof typeof FontAwesome6.glyphMap;
     iconColor?: string;
   }>({ visible: false });
+  const [showAllReminders, setShowAllReminders] = useState(false);
 
   useEffect(() => {
     // Request notification permissions
     registerForPushNotifications();
+    // Clean up any duplicate scheduled notifications across sessions
+    dedupeMedicationNotifications();
 
     // Set up notification response listener
     const subscription = addNotificationResponseListener((response) => {
@@ -89,7 +103,7 @@ export default function HomeScreen() {
     if (reminders.length > 0 && !loading) {
       scheduleAllNotifications();
     }
-  }, [reminders.length]); // Only trigger when count changes, not on every reminder update
+  }, [reminders.length, loading]);
 
   const showAlert = (title: string, message: string, buttons?: Array<{text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive"}>, icon?: keyof typeof FontAwesome6.glyphMap, iconColor?: string) => {
     setCustomAlert({
@@ -108,13 +122,14 @@ export default function HomeScreen() {
 
   async function loadData() {
     try {
-      const [adherencePercent, dailyData] = await Promise.all([
+      const [adherencePercent, dailyData, remoteReminders] = await Promise.all([
         calculateAdherence(7),
         getDailyAdherence(7),
+        getRemindersFromStore(),
       ]);
 
-      // Start with empty data
-      setReminders([]);
+      // Load reminders from Firestore
+      setReminders(remoteReminders);
       setAdherencePercentage(adherencePercent);
       setCaregivers([]);
       
@@ -123,7 +138,7 @@ export default function HomeScreen() {
       }
 
       setMedicationHistory([]);
-      setActiveRemindersCount(0);
+      setActiveRemindersCount(remoteReminders.filter(r => r.status === "scheduled").length);
       setLoading(false);
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -176,25 +191,22 @@ export default function HomeScreen() {
       time: medicationData.time,
       notes: medicationData.notes || "",
       status: "scheduled",
+      createdAt: new Date().toISOString(),
     };
 
     console.log("Creating reminder:", newReminder);
 
     try {
-      // Save locally only
-      console.log("Saving reminder locally");
-      
       // Close modal first
       setShowAddModal(false);
       setNewMedication({ title: "", dosage: "", time: "", notes: "" });
-      
-      // Update local state
+
+      // Persist to Firestore then update local state; scheduling will be handled by effect
+      await createReminderInStore(newReminder as any);
       setReminders((prev) => [...prev, newReminder]);
-      console.log("Updated local state");
-      
-      await scheduleReminderNotification(newReminder);
-      console.log("Scheduled notification");
-      
+      setActiveRemindersCount((c) => c + 1);
+      console.log("Reminder saved to Firestore and local state updated");
+
       // Show success alert after modal is closed
       setTimeout(() => {
         showAlert(
@@ -217,8 +229,74 @@ export default function HomeScreen() {
     }
   }
 
+  async function handleStartEdit(reminder: any) {
+    setSelectedReminderId(reminder.id);
+    setEditMedication({ title: reminder.title, dosage: reminder.dosage, time: reminder.time, notes: reminder.notes || "" });
+    setShowEditModal(true);
+  }
+
+  async function handleUpdateMedication(medication?: { title: string; dosage: string; time: string; notes: string }) {
+    if (!selectedReminderId) return;
+    const data = medication || editMedication;
+    try {
+      // Persist to Firestore
+      await updateReminderInStore(selectedReminderId, {
+        title: data.title,
+        dosage: data.dosage,
+        time: data.time,
+        notes: data.notes,
+      } as any);
+
+      // Update local list
+      setReminders((prev) => prev.map((r) => r.id === selectedReminderId ? { ...r, ...data } : r));
+
+      // Reschedule notifications for this reminder
+      await cancelMedicationNotifications(selectedReminderId);
+      const updated = { id: selectedReminderId, ...data, status: "scheduled" } as any;
+      await scheduleReminderNotification(updated);
+
+      setShowEditModal(false);
+      showAlert(
+        "Berhasil",
+        "Perubahan pengingat sudah disimpan",
+        [{ text: "OK" }],
+        "check-circle",
+        "#10D99D"
+      );
+    } catch (e) {
+      console.error("Failed to update reminder", e);
+      showAlert("Error", "Gagal menyimpan perubahan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+    }
+  }
+
+  async function handleDeleteMedication() {
+    if (!selectedReminderId) return;
+    try {
+      await cancelMedicationNotifications(selectedReminderId);
+      const ok = await deleteReminderInStore(selectedReminderId);
+      if (ok) {
+        setReminders((prev) => prev.filter((r) => r.id !== selectedReminderId));
+        setActiveRemindersCount((c) => Math.max(0, c - 1));
+      }
+      setShowEditModal(false);
+      showAlert(
+        "Berhasil",
+        "Pengingat sudah dihapus",
+        [{ text: "OK" }],
+        "check-circle",
+        "#10D99D"
+      );
+    } catch (e) {
+      console.error("Failed to delete reminder", e);
+      showAlert("Error", "Gagal menghapus pengingat", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+    }
+  }
+
   async function handleViewHistory() {
     try {
+      // Load latest history from Firebase before showing modal
+      const history = await getMedicationHistory(7);
+      setMedicationHistory(history);
       setShowHistoryModal(true);
     } catch (error) {
       console.error("Error viewing history:", error);
@@ -262,6 +340,8 @@ export default function HomeScreen() {
       setReminders((prev) =>
         prev.map((r) => (r.id === targetId ? { ...r, status: "taken" } : r))
       );
+      // Persist status change to Firestore
+      await updateReminderInStore(targetId, { status: "taken" } as any);
 
       // Refresh adherence data
       const newAdherence = await calculateAdherence(7);
@@ -433,12 +513,16 @@ export default function HomeScreen() {
         </Surface>
 
         <Surface>
-          <SectionHeader title="Pengingat hari ini" actionLabel="Lihat semua" />
+          <SectionHeader
+            title="Pengingat hari ini"
+            actionLabel={reminders.length > 3 ? "Lihat semua" : undefined}
+            onActionPress={() => reminders.length > 3 && setShowAllReminders(true)}
+          />
           {loading ? (
             <ReminderShimmer />
           ) : reminders.length > 0 ? (
             <View style={styles.remindersList}>
-              {reminders.map((item) => (
+              {(reminders.length > 3 ? reminders.slice(0, 3) : reminders).map((item) => (
                 <View
                   key={item.id}
                   style={[
@@ -447,6 +531,7 @@ export default function HomeScreen() {
                       borderColor: theme.colors.border,
                     },
                   ]}
+                  onTouchEnd={() => handleStartEdit(item)}
                 >
                   <View
                     style={[
@@ -515,6 +600,16 @@ export default function HomeScreen() {
         onMedicationChange={setNewMedication}
       />
 
+      <AddMedicationModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onAdd={handleUpdateMedication}
+        medication={editMedication}
+        onMedicationChange={setEditMedication}
+        mode="edit"
+        onDelete={handleDeleteMedication}
+      />
+
       <MedicationHistoryModal
         visible={showHistoryModal}
         onClose={() => setShowHistoryModal(false)}
@@ -529,6 +624,16 @@ export default function HomeScreen() {
         icon={customAlert.icon}
         iconColor={customAlert.iconColor}
         onClose={closeAlert}
+      />
+
+      <RemindersModal
+        visible={showAllReminders}
+        onClose={() => setShowAllReminders(false)}
+        reminders={reminders}
+        onSelect={(item) => {
+          setShowAllReminders(false);
+          handleStartEdit(item);
+        }}
       />
     </SafeAreaView>
   );

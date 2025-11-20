@@ -1,7 +1,5 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { getApps, initializeApp } from "firebase/app";
+import { getFirestore, initializeFirestore, setLogLevel } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -10,8 +8,17 @@ const firebaseConfig = {
   projectId: "healthkathon-medmemory",
   storageBucket: "healthkathon-medmemory.firebasestorage.app",
   messagingSenderId: "696161324408",
-  appId: "1:696161324408:web:0433668b80bf164de84c8d"
+  appId: "1:696161324408:web:0433668b80bf164de84c8d",
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase (avoid re-initialization in development)
+export const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
+
+// Initialize Firestore with React Native compatibility
+initializeFirestore(app, { experimentalForceLongPolling: true });
+export const db = getFirestore(app);
+
+// Reduce Firestore log noise (e.g., transient BloomFilter warnings)
+setLogLevel("error");
+
+export default app;

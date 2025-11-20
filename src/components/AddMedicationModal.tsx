@@ -10,6 +10,8 @@ interface AddMedicationModalProps {
   onAdd: (medication: { title: string; dosage: string; time: string; notes: string }) => void;
   medication: { title: string; dosage: string; time: string; notes: string };
   onMedicationChange: (medication: { title: string; dosage: string; time: string; notes: string }) => void;
+  mode?: "add" | "edit";
+  onDelete?: () => void;
 }
 
 export function AddMedicationModal({
@@ -18,11 +20,37 @@ export function AddMedicationModal({
   onAdd,
   medication,
   onMedicationChange,
+  mode = "add",
+  onDelete,
 }: AddMedicationModalProps) {
   const { theme } = useTheme();
 
   const handleInputChange = (field: keyof typeof medication, value: string) => {
     onMedicationChange({ ...medication, [field]: value });
+  };
+
+  const formatTimeInput = (text: string) => {
+    const digits = text.replace(/\D/g, "").slice(0, 4);
+    if (digits.length <= 2) return digits;
+    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  };
+
+  const normalizeTime = (text: string) => {
+    const match = text.match(/^(\d{1,2})(?::?(\d{1,2}))?$/);
+    if (!match) return text;
+    let h = parseInt(match[1] ?? "0", 10);
+    let m = parseInt(match[2] ?? "0", 10);
+    if (isNaN(h)) h = 0;
+    if (isNaN(m)) m = 0;
+    if (h > 23) h = 23;
+    if (m > 59) m = 59;
+    const hh = String(h).padStart(2, "0");
+    const mm = String(m).padStart(2, "0");
+    return `${hh}:${mm}`;
+  };
+
+  const isValidTime = (text: string) => {
+    return /^((0\d|1\d|2[0-3])):([0-5]\d)$/.test(text);
   };
 
   return (
@@ -39,7 +67,7 @@ export function AddMedicationModal({
         >
           <View style={styles.header}>
             <ThemedText variant="heading" weight="700">
-              Tambah Pengingat Obat
+              {mode === "edit" ? "Ubah Pengingat Obat" : "Tambah Pengingat Obat"}
             </ThemedText>
             <Pressable onPress={onClose}>
               <FontAwesome6 name="xmark" color={theme.colors.textSecondary} size={24} />
@@ -103,9 +131,13 @@ export function AddMedicationModal({
                 placeholder="Contoh: 07:00"
                 placeholderTextColor={theme.colors.muted}
                 value={medication.time}
-                onChangeText={(text) => handleInputChange("time", text)}
-                keyboardType="numbers-and-punctuation"
+                onChangeText={(text) => handleInputChange("time", formatTimeInput(text))}
+                onBlur={() => handleInputChange("time", normalizeTime(medication.time))}
+                keyboardType="number-pad"
               />
+              {!!medication.time && !isValidTime(medication.time) && (
+                <ThemedText variant="caption" color="muted">Format waktu harus HH:MM (00-23:00-59)</ThemedText>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -131,12 +163,23 @@ export function AddMedicationModal({
               />
             </View>
 
-            <Pressable
-              style={[styles.submitButton, { backgroundColor: theme.colors.accent }]}
-              onPress={() => onAdd(medication)}
-            >
-              <Text style={styles.submitButtonText}>Simpan Pengingat</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              {mode === "edit" && (
+                <Pressable
+                  style={[styles.submitButton, { backgroundColor: theme.colors.cardMuted, flex: 1 }]}
+                  onPress={onDelete}
+                >
+                  <Text style={[styles.submitButtonText, { color: theme.colors.textPrimary }]}>Hapus</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={[styles.submitButton, { backgroundColor: theme.colors.accent, flex: 2, opacity: (!medication.title || !medication.dosage || !isValidTime(medication.time)) ? 0.6 : 1 }]}
+                disabled={!medication.title || !medication.dosage || !isValidTime(medication.time)}
+                onPress={() => onAdd(medication)}
+              >
+                <Text style={styles.submitButtonText}>{mode === "edit" ? "Simpan Perubahan" : "Simpan Pengingat"}</Text>
+              </Pressable>
+            </View>
           </View>
         </Pressable>
       </Pressable>
