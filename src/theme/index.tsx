@@ -1,12 +1,15 @@
+import { onAuthStateChanged } from "firebase/auth";
 import {
-  PropsWithChildren,
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
+    PropsWithChildren,
+    createContext,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
 } from "react";
 import { Appearance } from "react-native";
+import { auth } from "../config/firebase";
+import { getUISettings, saveUISettings } from "../services/storage";
 
 export type ThemeMode = "light" | "dark";
 
@@ -122,22 +125,48 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [mode, setMode] = useState<ThemeMode>("light");
+  const [mode, setModeState] = useState<ThemeMode>("light");
 
   useEffect(() => {
-    // Align initial mode with current system preference so the UI does not flicker.
-    const systemScheme = Appearance.getColorScheme();
-    if (systemScheme === "dark" || systemScheme === "light") {
-      setMode(systemScheme);
-    }
+    const loadTheme = async () => {
+      try {
+        const settings = await getUISettings();
+        if (settings.themeMode) {
+          setModeState(settings.themeMode);
+        } else {
+          const systemScheme = Appearance.getColorScheme();
+          if (systemScheme === "dark" || systemScheme === "light") {
+            setModeState(systemScheme);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load theme:", error);
+      }
+    };
+
+    const unsub = onAuthStateChanged(auth, () => {
+      loadTheme();
+    });
+
+    return () => unsub();
   }, []);
+
+  const setMode = async (newMode: ThemeMode) => {
+    setModeState(newMode);
+    try {
+      const currentSettings = await getUISettings();
+      await saveUISettings({ ...currentSettings, themeMode: newMode });
+    } catch (error) {
+      console.error("Failed to save theme:", error);
+    }
+  };
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme: mode === "dark" ? darkTheme : lightTheme,
       mode,
       setMode,
-      toggleMode: () => setMode((prev) => (prev === "dark" ? "light" : "dark")),
+      toggleMode: () => setMode(mode === "dark" ? "light" : "dark"),
     }),
     [mode]
   );

@@ -1,17 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  setDoc,
-  updateDoc,
-  where,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    orderBy,
+    query,
+    setDoc,
+    updateDoc,
+    where,
 } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { auth, db } from "../config/firebase";
 
 const STORAGE_KEYS = {
   MEDICATION_HISTORY: "@medication_history",
@@ -31,6 +31,28 @@ async function getDeviceId(): Promise<string> {
   id = `device_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   await AsyncStorage.setItem(DEVICE_ID_KEY, id);
   return id;
+}
+
+async function getStoragePath(collectionName: string, userId?: string) {
+  if (userId) {
+    return collection(db, "users", userId, collectionName);
+  }
+  if (auth.currentUser) {
+    return collection(db, "users", auth.currentUser.uid, collectionName);
+  }
+  const deviceId = await getDeviceId();
+  return collection(db, "devices", deviceId, collectionName);
+}
+
+async function getDocRef(collectionName: string, docId: string, userId?: string) {
+  if (userId) {
+    return doc(db, "users", userId, collectionName, docId);
+  }
+  if (auth.currentUser) {
+    return doc(db, "users", auth.currentUser.uid, collectionName, docId);
+  }
+  const deviceId = await getDeviceId();
+  return doc(db, "devices", deviceId, collectionName, docId);
 }
 
 export type MedicationRecord = {
@@ -54,6 +76,7 @@ export type NotificationSettings = {
 
 export type UISettings = {
   beforeSchedule: boolean; // Enable notifications 30 minutes before schedule
+  themeMode?: "light" | "dark";
 };
 
 // Reminder model
@@ -68,13 +91,10 @@ export type Reminder = {
 };
 
 // Reminders (Firestore)
-export async function getReminders(): Promise<Reminder[]> {
+export async function getReminders(userId?: string): Promise<Reminder[]> {
   try {
-    const deviceId = await getDeviceId();
-    const q = query(
-      collection(db, "devices", deviceId, "reminders"),
-      orderBy("createdAt", "asc")
-    );
+    const colRef = await getStoragePath("reminders", userId);
+    const q = query(colRef, orderBy("createdAt", "asc"));
     const snap = await getDocs(q);
     const list: Reminder[] = [];
     snap.forEach((d) => list.push(d.data() as Reminder));
@@ -85,11 +105,10 @@ export async function getReminders(): Promise<Reminder[]> {
   }
 }
 
-export async function createReminder(reminder: Reminder): Promise<boolean> {
+export async function createReminder(reminder: Reminder, userId?: string): Promise<boolean> {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(collection(db, "devices", deviceId, "reminders"), reminder.id);
-    await setDoc(ref, { ...reminder, createdAt: reminder.createdAt ?? new Date().toISOString() });
+    const docRef = await getDocRef("reminders", reminder.id, userId);
+    await setDoc(docRef, { ...reminder, createdAt: reminder.createdAt ?? new Date().toISOString() });
     return true;
   } catch (error) {
     console.error("Error creating reminder:", error);
@@ -97,11 +116,10 @@ export async function createReminder(reminder: Reminder): Promise<boolean> {
   }
 }
 
-export async function updateReminder(id: string, updates: Partial<Reminder>): Promise<boolean> {
+export async function updateReminder(id: string, updates: Partial<Reminder>, userId?: string): Promise<boolean> {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(db, "devices", deviceId, "reminders", id);
-    await updateDoc(ref, updates as any);
+    const docRef = await getDocRef("reminders", id, userId);
+    await updateDoc(docRef, updates as any);
     return true;
   } catch (error) {
     console.error("Error updating reminder:", error);
@@ -109,11 +127,10 @@ export async function updateReminder(id: string, updates: Partial<Reminder>): Pr
   }
 }
 
-export async function deleteReminder(id: string): Promise<boolean> {
+export async function deleteReminder(id: string, userId?: string): Promise<boolean> {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(db, "devices", deviceId, "reminders", id);
-    await deleteDoc(ref);
+    const docRef = await getDocRef("reminders", id, userId);
+    await deleteDoc(docRef);
     return true;
   } catch (error) {
     console.error("Error deleting reminder:", error);
@@ -122,11 +139,10 @@ export async function deleteReminder(id: string): Promise<boolean> {
 }
 
 // Medication History
-export async function saveMedicationRecord(record: MedicationRecord) {
+export async function saveMedicationRecord(record: MedicationRecord, userId?: string) {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(collection(db, "devices", deviceId, "medication_history"), record.id);
-    await setDoc(ref, record);
+    const docRef = await getDocRef("medication_history", record.id, userId);
+    await setDoc(docRef, record);
     return true;
   } catch (error) {
     console.error("Error saving medication record:", error);
@@ -134,15 +150,15 @@ export async function saveMedicationRecord(record: MedicationRecord) {
   }
 }
 
-export async function getMedicationHistory(days: number = 7): Promise<MedicationRecord[]> {
+export async function getMedicationHistory(days: number = 7, userId?: string): Promise<MedicationRecord[]> {
   try {
-    const deviceId = await getDeviceId();
+    const colRef = await getStoragePath("medication_history", userId);
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoffIso = cutoffDate.toISOString();
 
     const q = query(
-      collection(db, "devices", deviceId, "medication_history"),
+      colRef,
       where("date", ">=", cutoffIso),
       orderBy("date", "desc")
     );
@@ -156,11 +172,10 @@ export async function getMedicationHistory(days: number = 7): Promise<Medication
   }
 }
 
-export async function updateMedicationRecord(id: string, updates: Partial<MedicationRecord>) {
+export async function updateMedicationRecord(id: string, updates: Partial<MedicationRecord>, userId?: string) {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(db, "devices", deviceId, "medication_history", id);
-    await updateDoc(ref, updates as any);
+    const docRef = await getDocRef("medication_history", id, userId);
+    await updateDoc(docRef, updates as any);
     return true;
   } catch (error) {
     console.error("Error updating medication record:", error);
@@ -169,9 +184,9 @@ export async function updateMedicationRecord(id: string, updates: Partial<Medica
 }
 
 // Calculate adherence percentage (assumes 3 medications per day)
-export async function calculateAdherence(days: number = 7): Promise<number> {
+export async function calculateAdherence(days: number = 7, userId?: string): Promise<number> {
   try {
-    const history = await getMedicationHistory(days);
+    const history = await getMedicationHistory(days, userId);
     
     // Expected: 3 medications per day
     const expectedTotal = days * 3;
@@ -187,11 +202,10 @@ export async function calculateAdherence(days: number = 7): Promise<number> {
 }
 
 // UI Settings
-export async function saveUISettings(settings: UISettings): Promise<boolean> {
+export async function saveUISettings(settings: UISettings, userId?: string): Promise<boolean> {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(db, "devices", deviceId, "settings", "ui");
-    await setDoc(ref, settings, { merge: true });
+    const docRef = await getDocRef("settings", "ui", userId);
+    await setDoc(docRef, settings, { merge: true });
     return true;
   } catch (error) {
     console.error("Error saving UI settings:", error);
@@ -199,11 +213,10 @@ export async function saveUISettings(settings: UISettings): Promise<boolean> {
   }
 }
 
-export async function getUISettings(): Promise<UISettings> {
+export async function getUISettings(userId?: string): Promise<UISettings> {
   try {
-    const deviceId = await getDeviceId();
-    const ref = doc(db, "devices", deviceId, "settings", "ui");
-    const snap = await getDoc(ref);
+    const docRef = await getDocRef("settings", "ui", userId);
+    const snap = await getDoc(docRef);
     if (!snap.exists()) {
       return { beforeSchedule: true };
     }

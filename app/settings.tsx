@@ -4,8 +4,10 @@ import { ReactNode, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CustomAlert } from "../src/components/CustomAlert";
 import { SectionHeader, Surface, ThemedText } from "../src/components/ui";
-import { getUISettings, saveUISettings, UISettings } from "../src/services/storage";
+import { signOutUser } from "../src/services/auth";
+import { clearScheduledNotifications, getUISettings, saveUISettings, UISettings } from "../src/services/storage";
 import { ThemeMode, useTheme } from "../src/theme";
 
 export default function SettingsScreen() {
@@ -15,6 +17,18 @@ export default function SettingsScreen() {
     beforeSchedule: true,
   });
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+  
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: "",
+    message: "",
+    buttons: [] as any[]
+  });
+
+  const showAlert = (title: string, message: string, buttons: any[] = [{ text: "OK" }]) => {
+    setAlertConfig({ title, message, buttons });
+    setAlertVisible(true);
+  };
 
   // Load settings on mount
   useEffect(() => {
@@ -38,6 +52,24 @@ export default function SettingsScreen() {
     };
     setNotificationSettings(newSettings);
     await saveUISettings(newSettings);
+  };
+
+  const handleSignOut = async () => {
+    showAlert(
+      "Keluar",
+      "Apakah Anda yakin ingin keluar?",
+      [
+        { text: "Batal", style: "cancel" },
+        { 
+          text: "Keluar", 
+          style: "destructive",
+          onPress: async () => {
+            await signOutUser();
+            router.replace("/(tabs)/profile");
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -95,6 +127,64 @@ export default function SettingsScreen() {
             value={notificationSettings.beforeSchedule}
             onValueChange={() => handleNotificationToggle('beforeSchedule')}
           />
+          <Pressable 
+            onPress={async () => {
+              showAlert(
+                "Hapus Cache Notifikasi",
+                "Ini akan menghapus semua data notifikasi yang tersimpan di perangkat. Lanjutkan?",
+                [
+                  { text: "Batal", style: "cancel" },
+                  { 
+                    text: "Hapus", 
+                    onPress: async () => {
+                      await clearScheduledNotifications();
+                      showAlert("Sukses", "Cache notifikasi berhasil dihapus");
+                    }
+                  }
+                ]
+              );
+            }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: theme.colors.border, marginTop: 8 }}
+          >
+            <View style={{ 
+              width: 36, 
+              height: 36, 
+              borderRadius: 18, 
+              backgroundColor: theme.colors.cardMuted, 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}>
+              <FontAwesome6 name="trash-can" color={theme.colors.textSecondary} size={16} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText weight="500">Hapus Cache Notifikasi</ThemedText>
+              <ThemedText variant="caption" color="muted">Perbaiki masalah notifikasi ganda</ThemedText>
+            </View>
+            <FontAwesome6 name="chevron-right" size={12} color={theme.colors.muted} />
+          </Pressable>
+        </Surface>
+
+        <Surface>
+          <Pressable 
+            onPress={handleSignOut}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 }}
+          >
+            <View style={{ 
+              width: 36, 
+              height: 36, 
+              borderRadius: 18, 
+              backgroundColor: 'rgba(255, 107, 107, 0.1)', 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}>
+              <FontAwesome6 name="right-from-bracket" color={theme.colors.danger} size={16} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText weight="500" style={{ color: theme.colors.danger }}>Keluar</ThemedText>
+              <ThemedText variant="caption" color="muted">Keluar dari akun Anda</ThemedText>
+            </View>
+            <FontAwesome6 name="chevron-right" size={12} color={theme.colors.muted} />
+          </Pressable>
         </Surface>
       </ScrollView>
       
@@ -126,6 +216,13 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+      <CustomAlert
+        visible={alertVisible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        onClose={() => setAlertVisible(false)}
+      />
     </SafeAreaView>
   );
 }

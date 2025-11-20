@@ -1,12 +1,17 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { auth, db } from "../../src/config/firebase";
 
 import { AddMedicationModal } from "../../src/components/AddMedicationModal";
 import { ConfirmMedicationModal } from "../../src/components/ConfirmMedicationModal";
+import { ConnectPatientModal } from "../../src/components/ConnectPatientModal";
 import { CustomAlert } from "../../src/components/CustomAlert";
 import { MedicationHistoryModal } from "../../src/components/MedicationHistoryModal";
 import RemindersModal from "../../src/components/RemindersModal";
@@ -17,6 +22,14 @@ import {
   Surface,
   ThemedText,
 } from "../../src/components/ui";
+import {
+  getConnectedPatients,
+  getPendingRequests,
+  respondToConnectionRequest,
+  sendConnectionRequest,
+  type ConnectedUser,
+  type ConnectionRequest,
+} from "../../src/services/caregiver";
 import {
   addNotificationResponseListener,
   cancelMedicationNotifications,
@@ -40,6 +53,8 @@ import { useTheme } from "../../src/theme";
 
 export default function HomeScreen() {
   const { theme, mode } = useTheme();
+  const router = useRouter();
+  const [userRole, setUserRole] = useState<'patient' | 'caregiver' | null>(null);
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [adherenceData, setAdherenceData] = useState<any[]>([]);
@@ -63,6 +78,37 @@ export default function HomeScreen() {
     iconColor?: string;
   }>({ visible: false });
   const [showAllReminders, setShowAllReminders] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<ConnectionRequest[]>([]);
+  const [connectedPatients, setConnectedPatients] = useState<ConnectedUser[]>([]);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, "users", user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const role = docSnap.data().role;
+            setUserRole(role);
+            
+            // Load role-specific data
+            if (role === 'caregiver') {
+              loadCaregiverData(user.uid);
+            } else if (role === 'patient') {
+              loadPatientRequests(user.uid);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching user role:", error);
+        }
+      } else {
+        setUserRole(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     // Request notification permissions
@@ -119,6 +165,74 @@ export default function HomeScreen() {
   const closeAlert = () => {
     setCustomAlert({ visible: false });
   };
+
+  async function loadCaregiverData(uid: string) {
+    const patients = await getConnectedPatients(uid);
+    setConnectedPatients(patients);
+  }
+
+  async function loadPatientRequests(uid: string) {
+    const requests = await getPendingRequests(uid);
+    setPendingRequests(requests);
+  }
+
+  async function handleConnectPatient(email: string) {
+    if (!auth.currentUser) return;
+    
+    setIsConnecting(true);
+    try {
+      const result = await sendConnectionRequest(
+        auth.currentUser.uid,
+        auth.currentUser.displayName || "Caregiver",
+        auth.currentUser.email || "",
+        email
+      );
+
+      if (result.success) {
+        setShowConnectModal(false);
+        showAlert(
+          "Permintaan Terkirim",
+          "Menunggu konfirmasi dari pasien",
+          [{ text: "OK" }],
+          "check-circle",
+          "#10D99D"
+        );
+      } else {
+        showAlert(
+          "Gagal",
+          result.error || "Gagal mengirim permintaan",
+          [{ text: "OK" }],
+          "triangle-exclamation",
+          "#FF8585"
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      showAlert("Error", "Terjadi kesalahan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+    } finally {
+      setIsConnecting(false);
+    }
+  }
+
+  async function handleRespondRequest(requestId: string, accept: boolean) {
+    try {
+      const result = await respondToConnectionRequest(requestId, accept);
+      if (result.success) {
+        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+        showAlert(
+          accept ? "Terhubung" : "Ditolak",
+          accept ? "Anda sekarang terhubung dengan caregiver" : "Permintaan ditolak",
+          [{ text: "OK" }],
+          accept ? "check-circle" : "xmark-circle",
+          accept ? "#10D99D" : "#FF8585"
+        );
+      } else {
+        showAlert("Error", "Gagal memproses permintaan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   async function loadData() {
     try {
@@ -399,6 +513,104 @@ export default function HomeScreen() {
 
   const nextReminder = reminders.length > 0 ? reminders[0] : null;
 
+  if (userRole === 'caregiver') {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <StatusBar style={mode === "dark" ? "light" : "dark"} />
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, { padding: theme.spacing.md, gap: theme.spacing.md }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Surface padding={false}>
+            <LinearGradient
+              colors={theme.colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.hero}
+            >
+              <View style={styles.heroHeader}>
+                <ThemedText variant="title" weight="700" style={styles.heroTitle}>
+                  MedMemory
+                </ThemedText>
+                <FontAwesome6 name="user-nurse" color="white" size={24} />
+              </View>
+              <Text style={styles.heroSubtitle}>Mode Pendamping (Caregiver)</Text>
+            </LinearGradient>
+          </Surface>
+
+          <Surface>
+            {connectedPatients.length > 0 ? (
+              <View>
+                <SectionHeader 
+                  title="Pasien Terhubung" 
+                  subtitle={`${connectedPatients.length} pasien dalam pantauan`}
+                  actionLabel="Tambah"
+                  onActionPress={() => setShowConnectModal(true)}
+                />
+                <View style={{ gap: 12 }}>
+                  {connectedPatients.map((patient) => (
+                    <Pressable 
+                      key={patient.uid} 
+                      style={[
+                        styles.caregiverRow, 
+                        { 
+                          backgroundColor: theme.colors.cardMuted,
+                          padding: 12,
+                          borderRadius: 12,
+                          marginBottom: 0
+                        }
+                      ]}
+                      onPress={() => router.push({ pathname: "/patient-detail", params: { patientId: patient.uid } })}
+                    >
+                      <View style={[styles.reminderIcon, { backgroundColor: theme.colors.background }]}>
+                        <FontAwesome6 name="user" color={theme.colors.textPrimary} size={16} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText weight="600">{patient.name}</ThemedText>
+                        <ThemedText variant="caption" color="muted">{patient.email}</ThemedText>
+                      </View>
+                      <FontAwesome6 name="chevron-right" color={theme.colors.muted} size={14} />
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <FontAwesome6 name="users" color={theme.colors.muted} size={48} />
+                <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pasien terhubung</ThemedText>
+                <ThemedText variant="caption" color="muted">Hubungkan pasien untuk memantau pengobatan mereka</ThemedText>
+                
+                <Pressable
+                  style={[styles.primaryButton, { backgroundColor: theme.colors.accent, marginTop: 16, width: '100%' }]}
+                  onPress={() => setShowConnectModal(true)}
+                >
+                  <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Hubungkan Pasien</Text>
+                </Pressable>
+              </View>
+            )}
+          </Surface>
+        </ScrollView>
+
+        <ConnectPatientModal
+          visible={showConnectModal}
+          onClose={() => setShowConnectModal(false)}
+          onConnect={handleConnectPatient}
+          loading={isConnecting}
+        />
+
+        <CustomAlert
+          visible={customAlert.visible}
+          title={customAlert.title}
+          message={customAlert.message}
+          buttons={customAlert.buttons}
+          icon={customAlert.icon}
+          iconColor={customAlert.iconColor}
+          onClose={closeAlert}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
@@ -426,6 +638,56 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
         </Surface>
+
+        {pendingRequests.length > 0 && (
+          <Surface>
+            <SectionHeader title="Permintaan Koneksi" subtitle="Caregiver ingin terhubung" />
+            <View style={{ gap: 12 }}>
+              {pendingRequests.map((request) => (
+                <View 
+                  key={request.id} 
+                  style={[
+                    styles.caregiverRow, 
+                    { 
+                      backgroundColor: theme.colors.cardMuted,
+                      padding: 12,
+                      borderRadius: 12,
+                      marginBottom: 0,
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: 8
+                    }
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+                    <View style={[styles.reminderIcon, { backgroundColor: theme.colors.background }]}>
+                      <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={16} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText weight="600">{request.caregiverName}</ThemedText>
+                      <ThemedText variant="caption" color="muted">{request.caregiverEmail}</ThemedText>
+                    </View>
+                  </View>
+                  
+                  <View style={{ flexDirection: 'row', gap: 8, width: '100%', marginTop: 4 }}>
+                    <Pressable 
+                      style={{ flex: 1, padding: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border }}
+                      onPress={() => handleRespondRequest(request.id, false)}
+                    >
+                      <ThemedText variant="caption" weight="600">Tolak</ThemedText>
+                    </Pressable>
+                    <Pressable 
+                      style={{ flex: 1, padding: 8, alignItems: 'center', borderRadius: 8, backgroundColor: theme.colors.accent }}
+                      onPress={() => handleRespondRequest(request.id, true)}
+                    >
+                      <ThemedText variant="caption" weight="600" style={{ color: 'white' }}>Terima</ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </Surface>
+        )}
 
         <Surface>
           <SectionHeader

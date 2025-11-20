@@ -1,4 +1,5 @@
 import { getApps, initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore, initializeFirestore, setLogLevel } from "firebase/firestore";
 
 // Your web app's Firebase configuration
@@ -13,6 +14,18 @@ const firebaseConfig = {
 
 // Initialize Firebase (avoid re-initialization in development)
 export const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
+
+// Initialize Auth
+// @ts-ignore
+let auth: any;
+try {
+  // Try to initialize with persistence if possible, otherwise fallback
+  // For now using default getAuth which might warn on RN but works
+  auth = getAuth(app);
+} catch (e) {
+  console.error("Auth init error", e);
+}
+export { auth };
 
 // Initialize Firestore with React Native compatibility
 initializeFirestore(app, { experimentalForceLongPolling: true });
