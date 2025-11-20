@@ -37,30 +37,6 @@ export function AddMedicationModal({
     return `${mins} menit`;
   };
 
-  const formatTimeInput = (text: string) => {
-    const digits = text.replace(/\D/g, "").slice(0, 4);
-    if (digits.length <= 2) return digits;
-    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-  };
-
-  const normalizeTime = (text: string) => {
-    const match = text.match(/^(\d{1,2})(?::?(\d{1,2}))?$/);
-    if (!match) return text;
-    let h = parseInt(match[1] ?? "0", 10);
-    let m = parseInt(match[2] ?? "0", 10);
-    if (isNaN(h)) h = 0;
-    if (isNaN(m)) m = 0;
-    if (h > 23) h = 23;
-    if (m > 59) m = 59;
-    const hh = String(h).padStart(2, "0");
-    const mm = String(m).padStart(2, "0");
-    return `${hh}:${mm}`;
-  };
-
-  const isValidTime = (text: string) => {
-    return /^((0\d|1\d|2[0-3])):([0-5]\d)$/.test(text);
-  };
-
   return (
     <Modal
       visible={visible}
@@ -161,27 +137,78 @@ export function AddMedicationModal({
 
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" color="secondary" style={styles.label}>
-                Waktu (HH:MM) *
+                Waktu *
               </ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.cardMuted,
-                    color: theme.colors.textPrimary,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                placeholder="Contoh: 07:00"
-                placeholderTextColor={theme.colors.muted}
-                value={medication.time}
-                onChangeText={(text) => handleInputChange("time", formatTimeInput(text))}
-                onBlur={() => handleInputChange("time", normalizeTime(medication.time))}
-                keyboardType="number-pad"
-              />
-              {!!medication.time && !isValidTime(medication.time) && (
-                <ThemedText variant="caption" color="muted">Format waktu harus HH:MM (00-23:00-59)</ThemedText>
-              )}
+              
+              {/* Hour Selector */}
+              <View style={{ marginBottom: 12 }}>
+                <ThemedText variant="caption" color="secondary" style={{ marginBottom: 8 }}>
+                  Jam
+                </ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 6 }}>
+                  {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map((hour) => {
+                    const currentHour = medication.time.split(":")[0] || "00";
+                    const selected = hour === currentHour;
+                    return (
+                      <Pressable
+                        key={hour}
+                        onPress={() => {
+                          const minute = medication.time.split(":")[1] || "00";
+                          handleInputChange("time", `${hour}:${minute}`);
+                        }}
+                        style={{
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 12,
+                          marginRight: 8,
+                          backgroundColor: selected ? theme.colors.accent : theme.colors.cardMuted,
+                          borderWidth: 1,
+                          borderColor: selected ? theme.colors.accent : theme.colors.border,
+                        }}
+                      >
+                        <ThemedText style={{ color: selected ? "white" : theme.colors.textPrimary }}>
+                          {hour}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Minute Selector */}
+              <View>
+                <ThemedText variant="caption" color="secondary" style={{ marginBottom: 8 }}>
+                  Menit
+                </ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 6 }}>
+                  {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0")).map((minute) => {
+                    const currentMinute = medication.time.split(":")[1] || "00";
+                    const selected = minute === currentMinute;
+                    return (
+                      <Pressable
+                        key={minute}
+                        onPress={() => {
+                          const hour = medication.time.split(":")[0] || "00";
+                          handleInputChange("time", `${hour}:${minute}`);
+                        }}
+                        style={{
+                          paddingVertical: 8,
+                          paddingHorizontal: 10,
+                          borderRadius: 12,
+                          marginRight: 8,
+                          backgroundColor: selected ? theme.colors.accent : theme.colors.cardMuted,
+                          borderWidth: 1,
+                          borderColor: selected ? theme.colors.accent : theme.colors.border,
+                        }}
+                      >
+                        <ThemedText style={{ color: selected ? "white" : theme.colors.textPrimary }}>
+                          {minute}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -217,8 +244,8 @@ export function AddMedicationModal({
                 </Pressable>
               )}
               <Pressable
-                style={[styles.submitButton, { backgroundColor: theme.colors.accent, flex: 2, opacity: (!medication.title || !medication.dosage || !isValidTime(medication.time)) ? 0.6 : 1 }]}
-                disabled={!medication.title || !medication.dosage || !isValidTime(medication.time)}
+                style={[styles.submitButton, { backgroundColor: theme.colors.accent, flex: 2, opacity: (!medication.title || !medication.dosage || !medication.time) ? 0.6 : 1 }]}
+                disabled={!medication.title || !medication.dosage || !medication.time}
                 onPress={() => onAdd(medication)}
               >
                 <Text style={styles.submitButtonText}>{mode === "edit" ? "Simpan Perubahan" : "Simpan Pengingat"}</Text>
