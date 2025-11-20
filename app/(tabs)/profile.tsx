@@ -113,6 +113,7 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<'patient' | 'caregiver'>('patient');
   const [isRegistering, setIsRegistering] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
@@ -121,11 +122,19 @@ export default function ProfileScreen() {
   const [alertConfig, setAlertConfig] = useState({
     title: "",
     message: "",
-    buttons: [] as any[]
+    buttons: [] as any[],
+    icon: undefined as any,
+    iconColor: undefined as any,
   });
 
-  const showAlert = (title: string, message: string, buttons: any[] = [{ text: "OK" }]) => {
-    setAlertConfig({ title, message, buttons });
+  const showAlert = (
+    title: string,
+    message: string,
+    buttons: any[] = [{ text: "OK" }],
+    icon?: keyof typeof FontAwesome6.glyphMap,
+    iconColor?: string
+  ) => {
+    setAlertConfig({ title, message, buttons, icon, iconColor });
     setAlertVisible(true);
   };
 
@@ -310,13 +319,22 @@ export default function ProfileScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                 />
-                <StyledInput
-                  icon="lock"
-                  placeholder="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
+                <View style={[styles.inputContainer, { backgroundColor: theme.colors.cardMuted, borderColor: theme.colors.border }]}>
+                  <View style={{ width: 40, alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesome6 name="lock" size={16} color={theme.colors.muted} />
+                  </View>
+                  <TextInput
+                    style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Password"
+                    placeholderTextColor={theme.colors.muted}
+                    secureTextEntry={!showPassword}
+                  />
+                  <Pressable onPress={() => setShowPassword(s => !s)} style={{ width: 48, alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesome6 name={showPassword ? "eye" : "eye-slash"} size={16} color={theme.colors.muted} />
+                  </Pressable>
+                </View>
                 
                 <View style={{ marginTop: 8 }}>
                   <PrimaryButton 
@@ -427,6 +445,8 @@ export default function ProfileScreen() {
         title={alertConfig.title}
         message={alertConfig.message}
         buttons={alertConfig.buttons}
+        icon={alertConfig.icon}
+        iconColor={alertConfig.iconColor}
         onClose={() => setAlertVisible(false)}
       />
       <ConnectPatientModal
