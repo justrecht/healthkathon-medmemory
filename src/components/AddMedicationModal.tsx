@@ -1,5 +1,5 @@
 import { FontAwesome6 } from "@expo/vector-icons";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
@@ -7,9 +7,9 @@ import { ThemedText } from "./ui";
 interface AddMedicationModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (medication: { title: string; dosage: string; time: string; notes: string }) => void;
-  medication: { title: string; dosage: string; time: string; notes: string };
-  onMedicationChange: (medication: { title: string; dosage: string; time: string; notes: string }) => void;
+  onAdd: (medication: { title: string; dosage: string; time: string; notes: string; interval?: string }) => void;
+  medication: { title: string; dosage: string; time: string; notes: string; interval?: string };
+  onMedicationChange: (medication: { title: string; dosage: string; time: string; notes: string; interval?: string }) => void;
   mode?: "add" | "edit";
   onDelete?: () => void;
 }
@@ -27,6 +27,14 @@ export function AddMedicationModal({
 
   const handleInputChange = (field: keyof typeof medication, value: string) => {
     onMedicationChange({ ...medication, [field]: value });
+  };
+
+  const dosageOptions = Array.from({ length: 10 }, (_, i) => (i + 1) * 100); // 100..1000
+  const intervalOptions = Array.from({ length: 24 }, (_, i) => (i + 1) * 30); // 30..720 minutes (30min steps up to 12h)
+
+  const formatIntervalLabel = (mins: number) => {
+    if (mins % 60 === 0) return `${mins / 60} jam`;
+    return `${mins} menit`;
   };
 
   const formatTimeInput = (text: string) => {
@@ -99,20 +107,56 @@ export function AddMedicationModal({
               <ThemedText variant="caption" color="secondary" style={styles.label}>
                 Dosis *
               </ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.cardMuted,
-                    color: theme.colors.textPrimary,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                placeholder="Contoh: 500 mg"
-                placeholderTextColor={theme.colors.muted}
-                value={medication.dosage}
-                onChangeText={(text) => handleInputChange("dosage", text)}
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 6 }}>
+                {dosageOptions.map((d) => {
+                  const selected = String(d) === String(medication.dosage).replace(/\s*mg/i, "");
+                  return (
+                    <Pressable
+                      key={d}
+                      onPress={() => handleInputChange("dosage", `${d}`)}
+                      style={{
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        borderRadius: 12,
+                        marginRight: 8,
+                        backgroundColor: selected ? theme.colors.accent : theme.colors.cardMuted,
+                        borderWidth: 1,
+                        borderColor: selected ? theme.colors.accent : theme.colors.border,
+                      }}
+                    >
+                      <ThemedText style={{ color: selected ? "white" : theme.colors.textPrimary }}>{`${d} mg`}</ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText variant="caption" color="secondary" style={styles.label}>
+                Alarm Interval (kelipatan 30 menit)
+              </ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 6 }}>
+                {intervalOptions.map((mins) => {
+                  const selected = String(mins) === String(medication.interval || "");
+                  return (
+                    <Pressable
+                      key={mins}
+                      onPress={() => handleInputChange("interval", String(mins))}
+                      style={{
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderRadius: 12,
+                        marginRight: 8,
+                        backgroundColor: selected ? theme.colors.accent : theme.colors.cardMuted,
+                        borderWidth: 1,
+                        borderColor: selected ? theme.colors.accent : theme.colors.border,
+                      }}
+                    >
+                      <ThemedText style={{ color: selected ? "white" : theme.colors.textPrimary }}>{formatIntervalLabel(mins)}</ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             <View style={styles.inputGroup}>
