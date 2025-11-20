@@ -1,11 +1,15 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Button, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { ProfileShimmer } from "../../src/components/shimmer";
 import { GradientChip, Surface, ThemedText } from "../../src/components/ui";
+import { auth, db } from "../../src/config/firebase";
+import { useGoogleSignIn } from "../../src/services/googleAuth";
 import { useTheme } from "../../src/theme";
 
 export default function ProfileScreen() {
@@ -15,12 +19,40 @@ export default function ProfileScreen() {
   const [caregivers, setCaregivers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const { promptAsync } = useGoogleSignIn();
+
   useEffect(() => {
-    // Start with empty profile
-    setUserProfile(null);
-    setCaregivers([]);
-    setLoading(false);
+    // Subscribe to Firebase auth state
+    setLoading(true);
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setUserProfile(null);
+        setLoading(false);
+        return;
+      }
+      // ambil profile dari Firestore
+      const docRef = doc(db, "users", user.uid);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        setUserProfile(snap.data());
+      } else {
+        setUserProfile({
+          uid: user.uid,
+          name: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+        });
+      }
+      setLoading(false);
+    });
+
+    return () => unsub();
   }, []);
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    setUserProfile(null);
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -48,6 +80,9 @@ export default function ProfileScreen() {
               <FontAwesome6 name="user-slash" color={theme.colors.muted} size={48} />
               <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada akun</ThemedText>
               <ThemedText variant="caption" color="muted">Buat akun dulu buat lihat profil</ThemedText>
+              <View style={{ marginTop: 12, width: 160 }}>
+                <Button title="Masuk dengan Google" onPress={() => promptAsync()} />
+              </View>
             </View>
           ) : (
             <View style={styles.userRow}>
@@ -58,9 +93,12 @@ export default function ProfileScreen() {
                 <ThemedText variant="subheading" weight="600">
                   {userProfile.name}
                 </ThemedText>
-                <ThemedText variant="caption" color="muted">{userProfile.program}</ThemedText>
+                <ThemedText variant="caption" color="muted">{userProfile.program ?? userProfile.email}</ThemedText>
               </View>
-              <GradientChip label="Level stabil" />
+              <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                <GradientChip label="Level stabil" />
+                <Button title="Keluar" onPress={handleSignOut} />
+              </View>
             </View>
           )}
         </Surface>
@@ -70,17 +108,17 @@ export default function ProfileScreen() {
             <View style={styles.statRow}>
               <StatItem
                 label="Kepatuhan"
-                value={userProfile.adherence}
+                value={userProfile.adherence ?? "-"}
                 caption="7 hari terakhir"
               />
               <StatItem
                 label="Obat aktif"
-                value={userProfile.activeMeds}
+                value={userProfile.activeMeds ?? "-"}
                 caption="Terjadwal"
               />
               <StatItem
                 label="Visit klinik"
-                value={userProfile.visits}
+                value={userProfile.visits ?? "-"}
                 caption="Bulan ini"
               />
             </View>
