@@ -56,16 +56,31 @@ export default function SettingsScreen() {
 
   const handleSignOut = async () => {
     showAlert(
-      "Keluar",
-      "Apakah Anda yakin ingin keluar?",
+      "Keluar dari Akun",
+      "Apakah Anda yakin ingin keluar? Anda akan keluar dari sesi ini dan perlu masuk kembali untuk mengakses aplikasi.",
       [
         { text: "Batal", style: "cancel" },
         { 
           text: "Keluar", 
           style: "destructive",
           onPress: async () => {
-            await signOutUser();
-            router.replace("/(tabs)/profile");
+            try {
+              await signOutUser();
+              showAlert(
+                "Berhasil Keluar",
+                "Anda telah berhasil keluar dari akun. Sampai jumpa!",
+                [{ 
+                  text: "OK", 
+                  onPress: () => router.replace("/(tabs)/profile")
+                }]
+              );
+            } catch (error) {
+              showAlert(
+                "Gagal Keluar",
+                "Terjadi kesalahan saat keluar. Silakan coba lagi.",
+                [{ text: "OK" }]
+              );
+            }
           }
         }
       ]

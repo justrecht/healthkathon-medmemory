@@ -234,6 +234,22 @@ export default function ProfileScreen() {
 
     if (result.error) {
       showAlert("Authentication Error", result.error.message);
+    } else if (result.user) {
+      // Show success message
+      showAlert(
+        "Berhasil!",
+        isRegistering 
+          ? `Selamat datang, ${name}! Akun Anda telah dibuat.` 
+          : "Anda berhasil masuk!",
+        [{ text: "OK" }],
+        "check-circle",
+        "#10D99D"
+      );
+      
+      // Reset form
+      setEmail("");
+      setPassword("");
+      setName("");
     }
   };
 
