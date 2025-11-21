@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { clearScheduledNotifications, getScheduledNotifications, saveScheduledNotifications } from "./storage";
+import { clearScheduledNotifications, getScheduledNotifications, getUISettings, saveScheduledNotifications } from "./storage";
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -59,14 +59,19 @@ export async function dedupeMedicationNotifications() {
   await initializeScheduledNotifications();
   try {
     const all = await Notifications.getAllScheduledNotificationsAsync();
-    // Group by medicationId + type
+    // Group by medicationId + type + weekday (to handle recurring correctly)
     const groups = new Map<string, Array<{ id: string; date: number }>>();
     for (const n of all) {
       const medId = (n.content?.data as any)?.medicationId as string | undefined;
       const type = (n.content?.data as any)?.type as string | undefined;
-      const dateVal = (n.trigger as any)?.date ? new Date((n.trigger as any).date).getTime() : 0;
+      const trigger = n.trigger as any;
+      const dateVal = trigger?.date ? new Date(trigger.date).getTime() : 0;
+      const weekday = trigger?.weekday ?? 0; // 0 for non-recurring or if not present
+
       if (!medId || !type) continue;
-      const key = `${medId}:${type}`;
+      
+      // Key includes weekday so we don't merge Mon/Tue/etc into one group
+      const key = `${medId}:${type}:${weekday}`;
       const arr = groups.get(key) || [];
       arr.push({ id: n.identifier, date: dateVal });
       groups.set(key, arr);
@@ -127,6 +132,10 @@ export async function scheduleReminderNotification(
   // Initialize from storage if not done yet
   await initializeScheduledNotifications();
 
+  // Get UI settings to check if "before" notification is enabled
+  const uiSettings = await getUISettings();
+  const enableBeforeNotification = uiSettings.beforeSchedule;
+
   // Check if notifications are already scheduled for this medication
   const existing = scheduledNotifications.get(medication.id);
   if (existing && existing.length > 0) {
@@ -135,8 +144,9 @@ export async function scheduleReminderNotification(
     const existingIds = allScheduled.map(n => n.identifier);
     const stillValid = existing.filter(id => existingIds.includes(id));
     
-    if (stillValid.length > 0) {
-      console.log(`Notifications already scheduled for ${medication.id}, skipping...`);
+    // Only skip if ALL previously scheduled notifications are still valid
+    if (stillValid.length === existing.length) {
+      console.log(`Notifications already scheduled for ${medication.id} (${stillValid.length} active), skipping...`);
       return {
         beforeNotificationId: stillValid[0],
         onTimeNotificationId: stillValid[1],
@@ -144,8 +154,8 @@ export async function scheduleReminderNotification(
       };
     }
     
-    // If none are valid, cancel and reschedule
-    console.log(`Stale notifications found for ${medication.id}, rescheduling...`);
+    // If some are missing (or none exist), cancel any stragglers and reschedule fresh
+    console.log(`Partial or stale notifications found for ${medication.id} (found ${stillValid.length}/${existing.length}), rescheduling...`);
     for (const notifId of existing) {
       await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
     }
@@ -176,42 +186,46 @@ export async function scheduleReminderNotification(
           body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
           data: { medicationId: medication.id, type: "ontime" },
           sound: true,
+          // @ts-ignore
+          channelId: "medication-reminders",
         },
         trigger: {
-          channelId: "medication-reminders",
           weekday: weekday,
           hour: hours,
           minute: minutes,
           repeats: true,
-        },
+        } as any,
       });
       notificationIds.push(onTimeId);
 
-      // 2. Before Notification (30 mins before)
-      const beforeDate = new Date();
-      beforeDate.setHours(hours, minutes - 30, 0, 0);
-      let beforeWeekday = weekday;
-      // Adjust weekday if time rolled back to previous day
-      if (hours === 0 && minutes < 30) {
-        beforeWeekday = weekday === 1 ? 7 : weekday - 1;
-      }
+      // 2. Before Notification (30 mins before) - Only if enabled
+      if (enableBeforeNotification) {
+        const beforeDate = new Date();
+        beforeDate.setHours(hours, minutes - 30, 0, 0);
+        let beforeWeekday = weekday;
+        // Adjust weekday if time rolled back to previous day
+        if (hours === 0 && minutes < 30) {
+          beforeWeekday = weekday === 1 ? 7 : weekday - 1;
+        }
 
-      const beforeId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "🔔 Pengingat Obat",
-          body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
-          data: { medicationId: medication.id, type: "before" },
-          sound: true,
-        },
-        trigger: {
-          channelId: "medication-reminders",
-          weekday: beforeWeekday,
-          hour: beforeDate.getHours(),
-          minute: beforeDate.getMinutes(),
-          repeats: true,
-        },
-      });
-      notificationIds.push(beforeId);
+        const beforeId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "🔔 Pengingat Obat",
+            body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
+            data: { medicationId: medication.id, type: "before" },
+            sound: true,
+            // @ts-ignore
+            channelId: "medication-reminders",
+          },
+          trigger: {
+            weekday: beforeWeekday,
+            hour: beforeDate.getHours(),
+            minute: beforeDate.getMinutes(),
+            repeats: true,
+          } as any,
+        });
+        notificationIds.push(beforeId);
+      }
 
       // 3. After Notification (10 mins after)
       const afterDate = new Date();
@@ -228,14 +242,15 @@ export async function scheduleReminderNotification(
           body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
           data: { medicationId: medication.id, type: "after" },
           sound: true,
+          // @ts-ignore
+          channelId: "medication-reminders",
         },
         trigger: {
-          channelId: "medication-reminders",
           weekday: afterWeekday,
           hour: afterDate.getHours(),
           minute: afterDate.getMinutes(),
           repeats: true,
-        },
+        } as any,
       });
       notificationIds.push(afterId);
     }
@@ -256,8 +271,8 @@ export async function scheduleReminderNotification(
     // Schedule 30 minutes before
     const beforeTime = new Date(scheduledTime.getTime() - 30 * 60 * 1000);
     
-    // Schedule notification 30 minutes before (only if in future)
-    if (beforeTime.getTime() > now.getTime() + 60000) {
+    // Schedule notification 30 minutes before (only if in future AND enabled)
+    if (enableBeforeNotification && beforeTime.getTime() > now.getTime() + 60000) {
       const beforeNotificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: "🔔 Pengingat Obat",
