@@ -71,7 +71,7 @@ export default function SettingsScreen() {
                 "Anda telah berhasil keluar dari akun. Sampai jumpa!",
                 [{ 
                   text: "OK", 
-                  onPress: () => router.replace("/(tabs)/profile")
+                  onPress: () => router.replace("/login")
                 }]
               );
             } catch (error) {
