@@ -1,5 +1,7 @@
 import { getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+// @ts-ignore
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore, initializeFirestore, setLogLevel } from "firebase/firestore";
 
 // Your web app's Firebase configuration
@@ -20,10 +22,15 @@ export const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConf
 let auth: any;
 try {
   // Try to initialize with persistence if possible, otherwise fallback
-  // For now using default getAuth which might warn on RN but works
-  auth = getAuth(app);
-} catch (e) {
-  console.error("Auth init error", e);
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+} catch (e: any) {
+  if (e.code === 'auth/already-initialized') {
+    auth = getAuth(app);
+  } else {
+    console.error("Auth init error", e);
+  }
 }
 export { auth };
 

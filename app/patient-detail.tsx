@@ -1,23 +1,24 @@
 import { FontAwesome6 } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GradientChip, SectionHeader, Surface, ThemedText } from "../src/components/ui";
 import { db } from "../src/config/firebase";
 import {
-    calculateAdherence,
-    getMedicationHistory,
-    getReminders,
-    type MedicationRecord,
-    type Reminder
+  calculateAdherence,
+  getMedicationHistory,
+  getReminders,
+  type MedicationRecord,
+  type Reminder
 } from "../src/services/storage";
 import { useTheme } from "../src/theme";
 
 export default function PatientDetailScreen() {
   const { theme } = useTheme();
+  const router = useRouter();
   const { patientId } = useLocalSearchParams<{ patientId: string }>();
   const [loading, setLoading] = useState(true);
   const [patient, setPatient] = useState<any>(null);
@@ -65,16 +66,23 @@ export default function PatientDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          headerTitle: "Detail Pasien",
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerShadowVisible: false,
-          headerTintColor: theme.colors.textPrimary,
-        }}
-      />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'right', 'bottom', 'left']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      {/* Custom Header */}
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        paddingHorizontal: 16, 
+        paddingVertical: 12,
+        backgroundColor: theme.colors.background,
+        borderBottomWidth: 0,
+      }}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginRight: 16 }}>
+          <FontAwesome6 name="arrow-left" color={theme.colors.textPrimary} size={18} />
+        </Pressable>
+        <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>Detail Pasien</ThemedText>
+      </View>
       
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
         {/* Patient Header */}

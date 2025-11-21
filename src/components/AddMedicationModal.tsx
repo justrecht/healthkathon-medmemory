@@ -7,11 +7,10 @@ import { ThemedText } from "./ui";
 interface AddMedicationModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (medication: { title: string; dosage: string; time: string; notes: string; interval?: string }) => void;
-  medication: { title: string; dosage: string; time: string; notes: string; interval?: string };
-  onMedicationChange: (medication: { title: string; dosage: string; time: string; notes: string; interval?: string }) => void;
+  onAdd: (medication: { title: string; dosage: string; time: string; notes: string; interval?: string; repeatDays?: number[] }) => void;
+  medication: { title: string; dosage: string; time: string; notes: string; interval?: string; repeatDays?: number[] };
+  onMedicationChange: (medication: { title: string; dosage: string; time: string; notes: string; interval?: string; repeatDays?: number[] }) => void;
   mode?: "add" | "edit";
-  onDelete?: () => void;
 }
 
 export function AddMedicationModal({
@@ -21,20 +20,11 @@ export function AddMedicationModal({
   medication,
   onMedicationChange,
   mode = "add",
-  onDelete,
 }: AddMedicationModalProps) {
   const { theme } = useTheme();
 
   const handleInputChange = (field: keyof typeof medication, value: string) => {
     onMedicationChange({ ...medication, [field]: value });
-  };
-
-  const dosageOptions = Array.from({ length: 10 }, (_, i) => (i + 1) * 100); // 100..1000
-  const intervalOptions = Array.from({ length: 24 }, (_, i) => (i + 1) * 30); // 30..720 minutes (30min steps up to 12h)
-
-  const formatIntervalLabel = (mins: number) => {
-    if (mins % 60 === 0) return `${mins / 60} jam`;
-    return `${mins} menit`;
   };
 
   return (
@@ -83,56 +73,37 @@ export function AddMedicationModal({
               <ThemedText variant="caption" color="secondary" style={styles.label}>
                 Dosis *
               </ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 6 }}>
-                {dosageOptions.map((d) => {
-                  const selected = String(d) === String(medication.dosage).replace(/\s*mg/i, "");
-                  return (
-                    <Pressable
-                      key={d}
-                      onPress={() => handleInputChange("dosage", `${d}`)}
-                      style={{
-                        paddingVertical: 8,
-                        paddingHorizontal: 14,
-                        borderRadius: 12,
-                        marginRight: 8,
-                        backgroundColor: selected ? theme.colors.accent : theme.colors.cardMuted,
-                        borderWidth: 1,
-                        borderColor: selected ? theme.colors.accent : theme.colors.border,
-                      }}
-                    >
-                      <ThemedText style={{ color: selected ? "white" : theme.colors.textPrimary }}>{`${d} mg`}</ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <ThemedText variant="caption" color="secondary" style={styles.label}>
-                Alarm Interval (kelipatan 30 menit)
-              </ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 6 }}>
-                {intervalOptions.map((mins) => {
-                  const selected = String(mins) === String(medication.interval || "");
-                  return (
-                    <Pressable
-                      key={mins}
-                      onPress={() => handleInputChange("interval", String(mins))}
-                      style={{
-                        paddingVertical: 8,
-                        paddingHorizontal: 12,
-                        borderRadius: 12,
-                        marginRight: 8,
-                        backgroundColor: selected ? theme.colors.accent : theme.colors.cardMuted,
-                        borderWidth: 1,
-                        borderColor: selected ? theme.colors.accent : theme.colors.border,
-                      }}
-                    >
-                      <ThemedText style={{ color: selected ? "white" : theme.colors.textPrimary }}>{formatIntervalLabel(mins)}</ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              <View
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.cardMuted,
+                    borderColor: theme.colors.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  },
+                ]}
+              >
+                <TextInput
+                  style={{
+                    flex: 1,
+                    color: theme.colors.textPrimary,
+                    fontFamily: "Geist",
+                    fontSize: 15,
+                    padding: 0,
+                  }}
+                  placeholder="Contoh: 500"
+                  placeholderTextColor={theme.colors.muted}
+                  keyboardType="numeric"
+                  value={medication.dosage ? String(medication.dosage).replace(/[^0-9]/g, "") : ""}
+                  onChangeText={(text) => {
+                    const cleanText = text.replace(/[^0-9]/g, "");
+                    handleInputChange("dosage", cleanText ? `${cleanText} mg` : "");
+                  }}
+                />
+                <ThemedText color="muted">mg</ThemedText>
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -213,6 +184,52 @@ export function AddMedicationModal({
 
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" color="secondary" style={styles.label}>
+                Ulangi Hari
+              </ThemedText>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 4 }}>
+                {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((day, index) => {
+                  const isSelected = medication.repeatDays?.includes(index) ?? true;
+                  return (
+                    <Pressable
+                      key={day}
+                      onPress={() => {
+                        const currentDays = medication.repeatDays ?? [0, 1, 2, 3, 4, 5, 6];
+                        let newDays;
+                        if (currentDays.includes(index)) {
+                          newDays = currentDays.filter((d) => d !== index);
+                        } else {
+                          newDays = [...currentDays, index].sort();
+                        }
+                        handleInputChange("repeatDays" as any, newDays as any);
+                      }}
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: isSelected ? theme.colors.accent : theme.colors.cardMuted,
+                        borderWidth: 1,
+                        borderColor: isSelected ? theme.colors.accent : theme.colors.border,
+                      }}
+                    >
+                      <ThemedText
+                        style={{
+                          color: isSelected ? "white" : theme.colors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {day}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <ThemedText variant="caption" color="secondary" style={styles.label}>
                 Catatan (Opsional)
               </ThemedText>
               <TextInput
@@ -235,14 +252,6 @@ export function AddMedicationModal({
             </View>
 
             <View style={{ flexDirection: "row", gap: 12 }}>
-              {mode === "edit" && (
-                <Pressable
-                  style={[styles.submitButton, { backgroundColor: theme.colors.cardMuted, flex: 1 }]}
-                  onPress={onDelete}
-                >
-                  <Text style={[styles.submitButtonText, { color: theme.colors.textPrimary }]}>Hapus</Text>
-                </Pressable>
-              )}
               <Pressable
                 style={[styles.submitButton, { backgroundColor: theme.colors.accent, flex: 2, opacity: (!medication.title || !medication.dosage || !medication.time) ? 0.6 : 1 }]}
                 disabled={!medication.title || !medication.dosage || !medication.time}

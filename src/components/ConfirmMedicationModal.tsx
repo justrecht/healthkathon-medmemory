@@ -1,5 +1,5 @@
 import { FontAwesome6 } from "@expo/vector-icons";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
@@ -9,6 +9,7 @@ interface ConfirmMedicationModalProps {
   onClose: () => void;
   onConfirm: () => void;
   medicationName?: string;
+  loading?: boolean;
 }
 
 export function ConfirmMedicationModal({
@@ -16,6 +17,7 @@ export function ConfirmMedicationModal({
   onClose,
   onConfirm,
   medicationName,
+  loading = false,
 }: ConfirmMedicationModalProps) {
   const { theme } = useTheme();
 
@@ -24,9 +26,9 @@ export function ConfirmMedicationModal({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={loading ? () => {} : onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={loading ? undefined : onClose}>
         <Pressable
           style={[styles.modalContent, { backgroundColor: theme.colors.card }]}
           onPress={(e) => e.stopPropagation()}
@@ -44,14 +46,20 @@ export function ConfirmMedicationModal({
             <Pressable
               style={[styles.button, { backgroundColor: theme.colors.cardMuted }]}
               onPress={onClose}
+              disabled={loading}
             >
-              <ThemedText weight="600">Belum</ThemedText>
+              <ThemedText weight="600" style={{ opacity: loading ? 0.5 : 1 }}>Belum</ThemedText>
             </Pressable>
             <Pressable
               style={[styles.button, { backgroundColor: theme.colors.success }]}
               onPress={onConfirm}
+              disabled={loading}
             >
-              <Text style={styles.confirmButtonText}>Sudah</Text>
+              {loading ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <Text style={styles.confirmButtonText}>Sudah</Text>
+              )}
             </Pressable>
           </View>
         </Pressable>

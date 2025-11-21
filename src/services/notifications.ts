@@ -121,13 +121,11 @@ export async function scheduleReminderNotification(
     dosage: string;
     time: string;
     notes?: string;
+    repeatDays?: number[];
   }
 ) {
   // Initialize from storage if not done yet
   await initializeScheduledNotifications();
-
-  // Proactive dedupe before scheduling to avoid bursts when state rehydrates
-  await dedupeMedicationNotifications();
 
   // Check if notifications are already scheduled for this medication
   const existing = scheduledNotifications.get(medication.id);
@@ -155,73 +153,157 @@ export async function scheduleReminderNotification(
 
   // Parse time (format: "HH:MM") and use DEVICE LOCAL TIME
   const [hours, minutes] = medication.time.split(":").map(Number);
-  const now = new Date();
-  const scheduledTime = new Date();
-  // Set local device time directly
-  scheduledTime.setHours(hours, minutes, 0, 0);
-
-  // If the time has passed today, schedule for tomorrow
-  if (scheduledTime <= now) {
-    scheduledTime.setDate(scheduledTime.getDate() + 1);
+  
+  if (isNaN(hours) || isNaN(minutes)) {
+    console.error(`Invalid time format for medication ${medication.title}: ${medication.time}`);
+    return null;
   }
-
-  console.log(`Scheduling notifications for ${medication.title} at ${scheduledTime.toLocaleString()}`);
 
   const notificationIds: string[] = [];
 
-  // Schedule 30 minutes before
-  const beforeTime = new Date(scheduledTime.getTime() - 30 * 60 * 1000);
-  
-  // Schedule notification 30 minutes before (only if in future)
-  if (beforeTime > now) {
-    const beforeNotificationId = await Notifications.scheduleNotificationAsync({
+  // If repeatDays is provided, use recurring notifications
+  if (medication.repeatDays && medication.repeatDays.length > 0) {
+    console.log(`Scheduling recurring notifications for ${medication.title} on days: ${medication.repeatDays}`);
+    
+    for (const dayIndex of medication.repeatDays) {
+      // Expo: 1=Sun, 7=Sat. JS: 0=Sun, 6=Sat.
+      const weekday = dayIndex + 1;
+
+      // 1. On Time Notification
+      const onTimeId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "⏰ Waktunya Minum Obat!",
+          body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
+          data: { medicationId: medication.id, type: "ontime" },
+          sound: true,
+        },
+        trigger: {
+          channelId: "medication-reminders",
+          weekday: weekday,
+          hour: hours,
+          minute: minutes,
+          repeats: true,
+        },
+      });
+      notificationIds.push(onTimeId);
+
+      // 2. Before Notification (30 mins before)
+      const beforeDate = new Date();
+      beforeDate.setHours(hours, minutes - 30, 0, 0);
+      let beforeWeekday = weekday;
+      // Adjust weekday if time rolled back to previous day
+      if (hours === 0 && minutes < 30) {
+        beforeWeekday = weekday === 1 ? 7 : weekday - 1;
+      }
+
+      const beforeId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🔔 Pengingat Obat",
+          body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
+          data: { medicationId: medication.id, type: "before" },
+          sound: true,
+        },
+        trigger: {
+          channelId: "medication-reminders",
+          weekday: beforeWeekday,
+          hour: beforeDate.getHours(),
+          minute: beforeDate.getMinutes(),
+          repeats: true,
+        },
+      });
+      notificationIds.push(beforeId);
+
+      // 3. After Notification (10 mins after)
+      const afterDate = new Date();
+      afterDate.setHours(hours, minutes + 10, 0, 0);
+      let afterWeekday = weekday;
+      // Adjust weekday if time rolled forward to next day
+      if (hours === 23 && minutes >= 50) {
+        afterWeekday = weekday === 7 ? 1 : weekday + 1;
+      }
+
+      const afterId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "❗ Udah minum obat belum?",
+          body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+          data: { medicationId: medication.id, type: "after" },
+          sound: true,
+        },
+        trigger: {
+          channelId: "medication-reminders",
+          weekday: afterWeekday,
+          hour: afterDate.getHours(),
+          minute: afterDate.getMinutes(),
+          repeats: true,
+        },
+      });
+      notificationIds.push(afterId);
+    }
+  } else {
+    // Legacy/One-time logic
+    const now = new Date();
+    const scheduledTime = new Date();
+    // Set local device time directly
+    scheduledTime.setHours(hours, minutes, 0, 0);
+
+    // If the time has passed today (with 1 minute buffer), schedule for tomorrow
+    if (scheduledTime.getTime() <= now.getTime() + 60000) {
+      scheduledTime.setDate(scheduledTime.getDate() + 1);
+    }
+
+    console.log(`Scheduling one-time notifications for ${medication.title} at ${scheduledTime.toLocaleString()}`);
+
+    // Schedule 30 minutes before
+    const beforeTime = new Date(scheduledTime.getTime() - 30 * 60 * 1000);
+    
+    // Schedule notification 30 minutes before (only if in future)
+    if (beforeTime.getTime() > now.getTime() + 60000) {
+      const beforeNotificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🔔 Pengingat Obat",
+          body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
+          data: { medicationId: medication.id, type: "before" },
+          sound: true,
+        },
+        trigger: { 
+          channelId: "medication-reminders",
+          date: beforeTime,
+        },
+      });
+      notificationIds.push(beforeNotificationId);
+    }
+
+    // Schedule notification at exact time
+    const onTimeNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "🔔 Pengingat Obat",
-        body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
-        data: { medicationId: medication.id, type: "before" },
+        title: "⏰ Waktunya Minum Obat!",
+        body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
+        data: { medicationId: medication.id, type: "ontime" },
         sound: true,
       },
       trigger: { 
         channelId: "medication-reminders",
-        date: beforeTime,
+        date: scheduledTime,
       },
     });
-    notificationIds.push(beforeNotificationId);
-    console.log(`Scheduled before notification: ${beforeNotificationId}`);
+    notificationIds.push(onTimeNotificationId);
+
+    // Schedule reminder 10 minutes after if not confirmed
+    const afterTime = new Date(scheduledTime.getTime() + 10 * 60 * 1000);
+    const afterNotificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "❗ Udah minum obat belum?",
+        body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+        data: { medicationId: medication.id, type: "after" },
+        sound: true,
+      },
+      trigger: { 
+        channelId: "medication-reminders",
+        date: afterTime,
+      },
+    });
+    notificationIds.push(afterNotificationId);
   }
-
-  // Schedule notification at exact time
-  const onTimeNotificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "⏰ Waktunya Minum Obat!",
-      body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
-      data: { medicationId: medication.id, type: "ontime" },
-      sound: true,
-    },
-    trigger: { 
-      channelId: "medication-reminders",
-      date: scheduledTime,
-    },
-  });
-  notificationIds.push(onTimeNotificationId);
-  console.log(`Scheduled ontime notification: ${onTimeNotificationId}`);
-
-  // Schedule reminder 15 minutes after if not confirmed
-  const afterTime = new Date(scheduledTime.getTime() + 15 * 60 * 1000);
-  const afterNotificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "❗ Udah minum obat belum?",
-      body: `Konfirmasi konsumsi ${medication.title}`,
-      data: { medicationId: medication.id, type: "after" },
-      sound: true,
-    },
-    trigger: { 
-      channelId: "medication-reminders",
-      date: afterTime,
-    },
-  });
-  notificationIds.push(afterNotificationId);
-  console.log(`Scheduled after notification: ${afterNotificationId}`);
 
   // Store the notification IDs in memory and persist to storage
   scheduledNotifications.set(medication.id, notificationIds);

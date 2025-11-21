@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { GradientChip, Surface, ThemedText } from "../../src/components/ui";
 import { auth, db } from "../../src/config/firebase";
 import { getConnectedPatients, type ConnectedUser } from "../../src/services/caregiver";
+import { calculateAdherence, getReminders } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
 export default function ProfileScreen() {
@@ -17,6 +18,8 @@ export default function ProfileScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [connectedPatients, setConnectedPatients] = useState<ConnectedUser[]>([]);
+  const [adherence, setAdherence] = useState(0);
+  const [activeMedsCount, setActiveMedsCount] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -37,6 +40,13 @@ export default function ProfileScreen() {
             setConnectedPatients(patients);
           } else {
             setConnectedPatients([]);
+            // Fetch stats for patient
+            const [adherenceVal, reminders] = await Promise.all([
+              calculateAdherence(7, user.uid),
+              getReminders(user.uid)
+            ]);
+            setAdherence(adherenceVal);
+            setActiveMedsCount(reminders.length);
           }
         } else {
           setUserProfile({
@@ -81,7 +91,7 @@ export default function ProfileScreen() {
             <View style={{ padding: 16 }}>
               <ThemedText variant="subheading" weight="600">Belum masuk</ThemedText>
               <ThemedText variant="body" color="muted" style={{ marginTop: 8 }}>Silakan masuk untuk melihat profil Anda.</ThemedText>
-              <Pressable onPress={() => router.push("/login")} style={{ marginTop: 12 }}>
+              <Pressable onPress={() => router.push("/login" as any)} style={{ marginTop: 12 }}>
                 <ThemedText color="primary" weight="600">Ke Halaman Login</ThemedText>
               </Pressable>
             </View>
@@ -132,9 +142,8 @@ export default function ProfileScreen() {
               </View>
             ) : (
               <View style={styles.statRow}>
-                <StatItem label="Kepatuhan" value={userProfile.adherence ?? "-"} caption="7 hari terakhir" />
-                <StatItem label="Obat aktif" value={userProfile.activeMeds ?? "-"} caption="Terjadwal" />
-                <StatItem label="Visit klinik" value={userProfile.visits ?? "-"} caption="Bulan ini" />
+                <StatItem label="Konsistensi" value={`${adherence}%`} caption="7 hari terakhir" />
+                <StatItem label="Obat aktif" value={`${activeMedsCount}`} caption="Terjadwal" />
               </View>
             )}
           </Surface>

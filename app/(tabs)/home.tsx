@@ -65,8 +65,8 @@ export default function HomeScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedReminderId, setSelectedReminderId] = useState<string | null>(null);
-  const [editMedication, setEditMedication] = useState({ title: "", dosage: "", time: "", notes: "" });
-  const [newMedication, setNewMedication] = useState({ title: "", dosage: "", time: "", notes: "" });
+  const [editMedication, setEditMedication] = useState<{ title: string; dosage: string; time: string; notes: string; repeatDays?: number[] }>({ title: "", dosage: "", time: "", notes: "", repeatDays: [0,1,2,3,4,5,6] });
+  const [newMedication, setNewMedication] = useState<{ title: string; dosage: string; time: string; notes: string; repeatDays?: number[] }>({ title: "", dosage: "", time: "", notes: "", repeatDays: [0,1,2,3,4,5,6] });
   const [medicationHistory, setMedicationHistory] = useState<MedicationRecord[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [customAlert, setCustomAlert] = useState<{
@@ -82,6 +82,7 @@ export default function HomeScreen() {
   const [pendingRequests, setPendingRequests] = useState<ConnectionRequest[]>([]);
   const [connectedPatients, setConnectedPatients] = useState<ConnectedUser[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -243,6 +244,8 @@ export default function HomeScreen() {
       ]);
 
       // Load reminders from Firestore
+      // Sort by time to ensure order is correct
+      remoteReminders.sort((a: any, b: any) => a.time.localeCompare(b.time));
       setReminders(remoteReminders);
       setAdherencePercentage(adherencePercent);
       setCaregivers([]);
@@ -272,6 +275,7 @@ export default function HomeScreen() {
             dosage: reminder.dosage,
             time: reminder.time,
             notes: reminder.notes,
+            repeatDays: reminder.repeatDays,
           });
         }
       }
@@ -281,7 +285,7 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleAddMedication(medication?: { title: string; dosage: string; time: string; notes: string }) {
+  async function handleAddMedication(medication?: { title: string; dosage: string; time: string; notes: string; repeatDays?: number[] }) {
     const medicationData = medication || newMedication;
     
     console.log("Adding medication:", medicationData);
@@ -304,6 +308,7 @@ export default function HomeScreen() {
       dosage: medicationData.dosage,
       time: medicationData.time,
       notes: medicationData.notes || "",
+      repeatDays: medicationData.repeatDays ?? [0, 1, 2, 3, 4, 5, 6],
       status: "scheduled",
       createdAt: new Date().toISOString(),
     };
@@ -313,7 +318,7 @@ export default function HomeScreen() {
     try {
       // Close modal first
       setShowAddModal(false);
-      setNewMedication({ title: "", dosage: "", time: "", notes: "" });
+      setNewMedication({ title: "", dosage: "", time: "", notes: "", repeatDays: [0,1,2,3,4,5,6] });
 
       // Persist to Firestore then update local state; scheduling will be handled by effect
       await createReminderInStore(newReminder as any);
@@ -345,65 +350,70 @@ export default function HomeScreen() {
 
   async function handleStartEdit(reminder: any) {
     setSelectedReminderId(reminder.id);
-    setEditMedication({ title: reminder.title, dosage: reminder.dosage, time: reminder.time, notes: reminder.notes || "" });
+    setEditMedication({ 
+      title: reminder.title, 
+      dosage: reminder.dosage, 
+      time: reminder.time, 
+      notes: reminder.notes || "",
+      repeatDays: reminder.repeatDays ?? [0,1,2,3,4,5,6]
+    });
     setShowEditModal(true);
   }
 
-  async function handleUpdateMedication(medication?: { title: string; dosage: string; time: string; notes: string }) {
+  async function handleUpdateMedication(medication?: { title: string; dosage: string; time: string; notes: string; repeatDays?: number[] }) {
     if (!selectedReminderId) return;
     const data = medication || editMedication;
-    try {
-      // Persist to Firestore
-      await updateReminderInStore(selectedReminderId, {
-        title: data.title,
-        dosage: data.dosage,
-        time: data.time,
-        notes: data.notes,
-      } as any);
 
-      // Update local list
-      setReminders((prev) => prev.map((r) => r.id === selectedReminderId ? { ...r, ...data } : r));
+    // Close the edit modal first so the alert is visible
+    setShowEditModal(false);
 
-      // Reschedule notifications for this reminder
-      await cancelMedicationNotifications(selectedReminderId);
-      const updated = { id: selectedReminderId, ...data, status: "scheduled" } as any;
-      await scheduleReminderNotification(updated);
+    showAlert(
+      "Simpan Perubahan?",
+      "Yakin mau simpan perubahan jadwal obat ini?",
+      [
+        { 
+          text: "Batal", 
+          style: "cancel",
+          onPress: () => setShowEditModal(true) // Re-open modal if cancelled
+        },
+        { 
+          text: "Simpan", 
+          onPress: async () => {
+            try {
+              // Persist to Firestore
+              await updateReminderInStore(selectedReminderId, {
+                title: data.title,
+                dosage: data.dosage,
+                time: data.time,
+                notes: data.notes,
+                repeatDays: data.repeatDays,
+              } as any);
 
-      setShowEditModal(false);
-      showAlert(
-        "Berhasil",
-        "Perubahan pengingat sudah disimpan",
-        [{ text: "OK" }],
-        "check-circle",
-        "#10D99D"
-      );
-    } catch (e) {
-      console.error("Failed to update reminder", e);
-      showAlert("Error", "Gagal menyimpan perubahan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
-    }
-  }
+              // Update local list
+              setReminders((prev) => prev.map((r) => r.id === selectedReminderId ? { ...r, ...data } : r));
 
-  async function handleDeleteMedication() {
-    if (!selectedReminderId) return;
-    try {
-      await cancelMedicationNotifications(selectedReminderId);
-      const ok = await deleteReminderInStore(selectedReminderId);
-      if (ok) {
-        setReminders((prev) => prev.filter((r) => r.id !== selectedReminderId));
-        setActiveRemindersCount((c) => Math.max(0, c - 1));
-      }
-      setShowEditModal(false);
-      showAlert(
-        "Berhasil",
-        "Pengingat sudah dihapus",
-        [{ text: "OK" }],
-        "check-circle",
-        "#10D99D"
-      );
-    } catch (e) {
-      console.error("Failed to delete reminder", e);
-      showAlert("Error", "Gagal menghapus pengingat", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
-    }
+              // Reschedule notifications for this reminder
+              await cancelMedicationNotifications(selectedReminderId);
+              const updated = { id: selectedReminderId, ...data, status: "scheduled" } as any;
+              await scheduleReminderNotification(updated);
+
+              showAlert(
+                "Berhasil",
+                "Perubahan pengingat sudah disimpan",
+                [{ text: "OK" }],
+                "check-circle",
+                "#10D99D"
+              );
+            } catch (e) {
+              console.error("Failed to update reminder", e);
+              showAlert("Error", "Gagal menyimpan perubahan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+            }
+          }
+        }
+      ],
+      "floppy-disk",
+      theme.colors.accent
+    );
   }
 
   async function handleViewHistory() {
@@ -425,9 +435,10 @@ export default function HomeScreen() {
   }
 
   async function handleConfirmMedication(medicationId?: string) {
-    const targetId = medicationId || nextReminder.id;
+    const targetId = medicationId || nextReminder?.id;
     if (!targetId) return;
-    setShowConfirmModal(false);
+    
+    setIsConfirming(true);
 
     try {
       // Save to history
@@ -457,6 +468,9 @@ export default function HomeScreen() {
       // Persist status change to Firestore
       await updateReminderInStore(targetId, { status: "taken" } as any);
 
+      // Cancel any pending notifications for this medication (e.g. the "After" reminder)
+      await cancelMedicationNotifications(targetId);
+
       // Refresh adherence data
       const newAdherence = await calculateAdherence(7);
       setAdherencePercentage(newAdherence);
@@ -466,7 +480,7 @@ export default function HomeScreen() {
         setAdherenceData(dailyData);
       }
 
-      // Success handled by modal close
+      setShowConfirmModal(false);
     } catch (error) {
       console.error("Error confirming medication:", error);
       showAlert(
@@ -476,6 +490,81 @@ export default function HomeScreen() {
         "triangle-exclamation",
         "#FF8585"
       );
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  async function deleteReminderDirectly(id: string) {
+    try {
+      await cancelMedicationNotifications(id);
+      const ok = await deleteReminderInStore(id);
+      if (ok) {
+        setReminders((prev) => prev.filter((r) => r.id !== id));
+        setActiveRemindersCount((c) => Math.max(0, c - 1));
+      }
+      showAlert(
+        "Berhasil",
+        "Pengingat sudah dihapus",
+        [{ text: "OK" }],
+        "check-circle",
+        "#10D99D"
+      );
+    } catch (e) {
+      console.error("Failed to delete reminder", e);
+      showAlert("Error", "Gagal menghapus pengingat", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+    }
+  }
+
+  function confirmDelete(item: any) {
+    showAlert(
+      "Hapus Pengingat",
+      `Yakin mau hapus jadwal ${item.title}?`,
+      [
+        { text: "Batal", style: "cancel" },
+        { 
+            text: "Hapus", 
+            style: "destructive",
+            onPress: () => deleteReminderDirectly(item.id)
+        }
+      ],
+      "trash",
+      theme.colors.danger
+    );
+  }
+
+  function handlePressConfirmButton() {
+    if (!nextReminder) return;
+
+    const now = new Date();
+    const [schedHour, schedMin] = nextReminder.time.split(":").map(Number);
+    const scheduledTime = new Date();
+    scheduledTime.setHours(schedHour, schedMin, 0, 0);
+
+    // If scheduled time is in the future (more than 15 mins)
+    // We use today's date with scheduled time. 
+    // If it's 23:00 and schedule is 08:00, diff is negative (past).
+    // If it's 08:00 and schedule is 10:00, diff is positive (future).
+    const diffMs = scheduledTime.getTime() - now.getTime();
+    const diffMins = diffMs / (1000 * 60);
+
+    if (diffMins > 15) {
+      showAlert(
+        "Terlalu Cepat?",
+        `Jadwal obat ini jam ${nextReminder.time}. Yakin udah diminum sekarang?`,
+        [
+          { text: "Batal", style: "cancel" },
+          { 
+            text: "Ya, Sudah", 
+            onPress: () => setShowConfirmModal(true),
+            style: "default" 
+          }
+        ],
+        "clock",
+        theme.colors.warning
+      );
+    } else {
+      setShowConfirmModal(true);
     }
   }
 
@@ -511,7 +600,9 @@ export default function HomeScreen() {
     return () => clearInterval(checkMissedMedications);
   }, [reminders, caregivers]);
 
-  const nextReminder = reminders.length > 0 ? reminders[0] : null;
+  const nextReminder = reminders
+    .filter(r => r.status === 'scheduled')
+    .sort((a, b) => a.time.localeCompare(b.time))[0];
 
   if (userRole === 'caregiver') {
     return (
@@ -720,7 +811,7 @@ export default function HomeScreen() {
               </View>
               <Pressable
                 style={[styles.primaryButton, { backgroundColor: theme.colors.accent }]}
-                onPress={() => setShowConfirmModal(true)}
+                onPress={handlePressConfirmButton}
               >
                 <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Udah minum obat</Text>
               </Pressable>
@@ -791,25 +882,62 @@ export default function HomeScreen() {
                     styles.reminderRow,
                     {
                       borderColor: theme.colors.border,
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                      paddingVertical: 12,
                     },
                   ]}
-                  onTouchEnd={() => handleStartEdit(item)}
                 >
-                  <View
-                    style={[
-                      styles.reminderIcon,
-                      { backgroundColor: theme.colors.cardMuted },
-                    ]}
-                  >
-                    <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <View
+                      style={[
+                        styles.reminderIcon,
+                        { backgroundColor: theme.colors.cardMuted },
+                      ]}
+                    >
+                      <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText weight="600">{item.title}</ThemedText>
+                      <ThemedText color="muted">{item.notes}</ThemedText>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <ThemedText>{item.time}</ThemedText>
+                      <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText weight="600">{item.title}</ThemedText>
-                    <ThemedText color="muted">{item.notes}</ThemedText>
-                  </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <ThemedText>{item.time}</ThemedText>
-                    <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
+
+                  <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+                    <Pressable
+                      onPress={() => handleStartEdit(item)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        backgroundColor: theme.colors.cardMuted,
+                        borderRadius: 8,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <FontAwesome6 name="pen" size={12} color={theme.colors.textPrimary} />
+                      <ThemedText variant="caption" weight="600">Edit</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => confirmDelete(item)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        backgroundColor: "rgba(255,107,107,0.1)",
+                        borderRadius: 8,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <FontAwesome6 name="trash" size={12} color={theme.colors.danger} />
+                      <ThemedText variant="caption" weight="600" style={{ color: theme.colors.danger }}>Hapus</ThemedText>
+                    </Pressable>
                   </View>
                 </View>
               ))}
@@ -852,6 +980,7 @@ export default function HomeScreen() {
         onClose={() => setShowConfirmModal(false)}
         onConfirm={() => handleConfirmMedication()}
         medicationName={nextReminder?.title}
+        loading={isConfirming}
       />
 
       <AddMedicationModal
@@ -869,7 +998,6 @@ export default function HomeScreen() {
         medication={editMedication}
         onMedicationChange={setEditMedication}
         mode="edit"
-        onDelete={handleDeleteMedication}
       />
 
       <MedicationHistoryModal

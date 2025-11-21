@@ -88,6 +88,7 @@ export type Reminder = {
   notes?: string;
   status: "scheduled" | "taken" | "missed";
   createdAt?: string; // ISO date
+  repeatDays?: number[]; // 0-6, where 0 is Sunday
 };
 
 // Reminders (Firestore)
@@ -204,6 +205,9 @@ export async function calculateAdherence(days: number = 7, userId?: string): Pro
 // UI Settings
 export async function saveUISettings(settings: UISettings, userId?: string): Promise<boolean> {
   try {
+    // Save locally first for immediate effect and offline support
+    await AsyncStorage.setItem(STORAGE_KEYS.UI_SETTINGS, JSON.stringify(settings));
+
     const docRef = await getDocRef("settings", "ui", userId);
     await setDoc(docRef, settings, { merge: true });
     return true;
@@ -215,12 +219,28 @@ export async function saveUISettings(settings: UISettings, userId?: string): Pro
 
 export async function getUISettings(userId?: string): Promise<UISettings> {
   try {
-    const docRef = await getDocRef("settings", "ui", userId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
-      return { beforeSchedule: true };
+    // Try local storage first
+    const localData = await AsyncStorage.getItem(STORAGE_KEYS.UI_SETTINGS);
+    let settings: UISettings = localData ? JSON.parse(localData) : { beforeSchedule: true };
+
+    // If we have a user (or specific userId requested), try to sync from cloud
+    if (userId || auth.currentUser) {
+      try {
+        const docRef = await getDocRef("settings", "ui", userId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const cloudSettings = snap.data() as UISettings;
+          // Cloud wins for sync
+          settings = { ...settings, ...cloudSettings };
+          // Update local cache
+          await AsyncStorage.setItem(STORAGE_KEYS.UI_SETTINGS, JSON.stringify(settings));
+        }
+      } catch (e) {
+        console.warn("Failed to fetch cloud settings, using local", e);
+      }
     }
-    return snap.data() as UISettings;
+    
+    return settings;
   } catch (error) {
     console.error("Error getting UI settings:", error);
     return { beforeSchedule: true };
