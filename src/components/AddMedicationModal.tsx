@@ -36,6 +36,7 @@ export function AddMedicationModal({
 
   const { theme, mode: themeMode } = useTheme();
   const [showCustomTime, setShowCustomTime] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Animation values for preset cards
   const presetAnimations = useRef(
@@ -254,7 +255,10 @@ export function AddMedicationModal({
                   </View>
 
                   <Pressable
-                    onPress={() => setShowCustomTime(true)}
+                    onPress={() => {
+                      setShowCustomTime(true);
+                      setShowDatePicker(true);
+                    }}
                     style={[
                       styles.customTimeButton,
                       { 
@@ -272,7 +276,7 @@ export function AddMedicationModal({
                 </>
               ) : (
                 <>
-                  {/* Timer Picker */}
+                  {/* Display selected time */}
                   <View style={styles.customTimePicker}>
                     <View style={[styles.timePickerHeader, { 
                       backgroundColor: themeMode === "dark" ? "rgba(0,122,255,0.15)" : "rgba(0,122,255,0.1)",
@@ -280,40 +284,27 @@ export function AddMedicationModal({
                     }]}>
                       <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
                       <ThemedText variant="caption" weight="600" style={{ color: theme.colors.accent }}>
-                        Pilih waktu minum obat
+                        Waktu terpilih: {medication.time || "00:00"}
                       </ThemedText>
                     </View>
                     
-                    <View style={{ alignItems: "center", justifyContent: "center", width: "100%", paddingVertical: 20 }}>
-                      <DateTimePicker
-                        value={(() => {
-                          const [hours, minutes] = (medication.time || "00:00").split(':').map(Number);
-                          const date = new Date();
-                          date.setHours(hours || 0);
-                          date.setMinutes(minutes || 0);
-                          date.setSeconds(0);
-                          return date;
-                        })()}
-                        mode="time"
-                        is24Hour={true}
-                        display="spinner"
-                        onChange={(event, selectedDate) => {
-                          if (event.type === "set" && selectedDate) {
-                            const hours = selectedDate.getHours();
-                            const minutes = selectedDate.getMinutes();
-                            handleInputChange(
-                              "time",
-                              `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
-                            );
-                          }
-                        }}
-                        themeVariant={themeMode === "dark" ? "dark" : "light"}
-                        style={{
-                          width: 320,
-                          height: 180,
-                        }}
-                      />
-                    </View>
+                    <Pressable
+                      onPress={() => setShowDatePicker(true)}
+                      style={[
+                        styles.customTimeButton,
+                        { 
+                          backgroundColor: theme.colors.accent,
+                          borderWidth: 1,
+                          borderColor: theme.colors.accent,
+                          marginTop: 12,
+                        }
+                      ]}
+                    >
+                      <FontAwesome6 name="clock" color="#FFFFFF" size={16} />
+                      <ThemedText weight="600" style={{ color: "#FFFFFF" }}>
+                        Ubah Waktu
+                      </ThemedText>
+                    </Pressable>
                   </View>
 
                   <Pressable
@@ -333,6 +324,37 @@ export function AddMedicationModal({
                       Kembali ke Preset
                     </ThemedText>
                   </Pressable>
+                  
+                  {/* DateTimePicker Modal */}
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={(() => {
+                        const [hours, minutes] = (medication.time || "00:00").split(':').map(Number);
+                        const date = new Date();
+                        date.setHours(hours || 0);
+                        date.setMinutes(minutes || 0);
+                        date.setSeconds(0);
+                        return date;
+                      })()}
+                      mode="time"
+                      is24Hour={true}
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (event.type === "set" && selectedDate) {
+                          const hours = selectedDate.getHours();
+                          const minutes = selectedDate.getMinutes();
+                          handleInputChange(
+                            "time",
+                            `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+                          );
+                          setShowDatePicker(false);
+                        } else if (event.type === "dismissed") {
+                          setShowDatePicker(false);
+                        }
+                      }}
+                      themeVariant={themeMode === "dark" ? "dark" : "light"}
+                    />
+                  )}
                 </>
               )}
             </View>
@@ -406,18 +428,24 @@ export function AddMedicationModal({
                 scrollEnabled={false}
               />
             </View>
-
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <Pressable
-                style={[styles.submitButton, { backgroundColor: theme.colors.accent, flex: 2, opacity: (!medication.title || !medication.dosage || !medication.time) ? 0.6 : 1 }]}
-                disabled={!medication.title || !medication.dosage || !medication.time}
-                onPress={() => onAdd(medication)}
-              >
-                <Text style={styles.submitButtonText}>{mode === "edit" ? "Simpan Perubahan" : "Simpan Pengingat"}</Text>
-              </Pressable>
-            </View>
           </View>
         </Pressable>
+
+        <View style={{ width: "100%", maxWidth: 500, paddingHorizontal: 20, marginTop: 16 }}>
+          <Pressable
+            style={[
+              styles.submitButton, 
+              { 
+                backgroundColor: theme.colors.accent,
+                opacity: (!medication.title || !medication.dosage || !medication.time || (medication.repeatDays && medication.repeatDays.length === 0)) ? 0.6 : 1 
+              }
+            ]}
+            disabled={!medication.title || !medication.dosage || !medication.time || (medication.repeatDays && medication.repeatDays.length === 0)}
+            onPress={() => onAdd(medication)}
+          >
+            <Text style={styles.submitButtonText}>{mode === "edit" ? "Simpan Perubahan" : "Simpan Pengingat"}</Text>
+          </Pressable>
+        </View>
       </Pressable>
     </Modal>
   );

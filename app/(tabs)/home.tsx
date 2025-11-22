@@ -17,34 +17,34 @@ import { MedicationHistoryModal } from "../../src/components/MedicationHistoryMo
 import RemindersModal from "../../src/components/RemindersModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-  ThemedText
+    ThemedText
 } from "../../src/components/ui";
 import {
-  getConnectedPatients,
-  getPendingRequests,
-  respondToConnectionRequest,
-  sendConnectionRequest,
-  type ConnectedUser,
-  type ConnectionRequest,
+    getConnectedPatients,
+    getPendingRequests,
+    respondToConnectionRequest,
+    sendConnectionRequest,
+    type ConnectedUser,
+    type ConnectionRequest,
 } from "../../src/services/caregiver";
 import {
-  addNotificationResponseListener,
-  cancelMedicationNotifications,
-  dedupeMedicationNotifications,
-  registerForPushNotifications,
-  scheduleReminderNotification,
-  sendCaregiverNotification,
+    addNotificationResponseListener,
+    cancelMedicationNotifications,
+    dedupeMedicationNotifications,
+    registerForPushNotifications,
+    scheduleReminderNotification,
+    sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
-  calculateAdherence,
-  createReminder as createReminderInStore,
-  deleteReminder as deleteReminderInStore,
-  getDailyAdherence,
-  getMedicationHistory,
-  getReminders as getRemindersFromStore,
-  saveMedicationRecord,
-  updateReminder as updateReminderInStore,
-  type MedicationRecord
+    calculateAdherence,
+    createReminder as createReminderInStore,
+    deleteReminder as deleteReminderInStore,
+    getDailyAdherence,
+    getMedicationHistory,
+    getReminders as getRemindersFromStore,
+    saveMedicationRecord,
+    updateReminder as updateReminderInStore,
+    type MedicationRecord
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
@@ -143,13 +143,16 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Schedule notifications when reminders change (but only once per reminder)
+  // Schedule notifications when reminders change (but only once per app session)
   useEffect(() => {
-    if (reminders.length > 0 && !loading && !notificationsScheduledRef.current) {
-      notificationsScheduledRef.current = true;
-      scheduleAllNotifications();
+    if (reminders.length > 0 && !loading) {
+      // Only schedule if we haven't scheduled in this session
+      if (!notificationsScheduledRef.current) {
+        notificationsScheduledRef.current = true;
+        scheduleAllNotifications();
+      }
     }
-  }, [reminders.length, loading]);
+  }, [reminders, loading]);
 
   const showAlert = (title: string, message: string, buttons?: Array<{text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive"}>, icon?: keyof typeof FontAwesome6.glyphMap, iconColor?: string) => {
     setCustomAlert({
@@ -277,8 +280,23 @@ export default function HomeScreen() {
       const resetReminders = await resetDailyMedicationStatus(remoteReminders);
       
       // Load reminders from Firestore
-      // Sort by time to ensure order is correct
-      resetReminders.sort((a: any, b: any) => a.time.localeCompare(b.time));
+      // Sort by closest upcoming time
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      resetReminders.sort((a: any, b: any) => {
+        const [aHours, aMinutes] = a.time.split(':').map(Number);
+        const [bHours, bMinutes] = b.time.split(':').map(Number);
+        
+        const aTimeMinutes = aHours * 60 + aMinutes;
+        const bTimeMinutes = bHours * 60 + bMinutes;
+        
+        // If time has passed today, treat it as tomorrow (add 24 hours worth of minutes)
+        const aAdjusted = aTimeMinutes < currentMinutes ? aTimeMinutes + 1440 : aTimeMinutes;
+        const bAdjusted = bTimeMinutes < currentMinutes ? bTimeMinutes + 1440 : bTimeMinutes;
+        
+        return aAdjusted - bAdjusted;
+      });
       setReminders(resetReminders);
       setAdherencePercentage(adherencePercent);
       
@@ -680,7 +698,22 @@ export default function HomeScreen() {
 
   const nextReminder = reminders
     .filter(r => r.status === 'scheduled' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay())))
-    .sort((a, b) => a.time.localeCompare(b.time))[0];
+    .sort((a, b) => {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      const [aHours, aMinutes] = a.time.split(':').map(Number);
+      const [bHours, bMinutes] = b.time.split(':').map(Number);
+      
+      const aTimeMinutes = aHours * 60 + aMinutes;
+      const bTimeMinutes = bHours * 60 + bMinutes;
+      
+      // If time has passed today, treat it as tomorrow (add 24 hours)
+      const aAdjusted = aTimeMinutes < currentMinutes ? aTimeMinutes + 1440 : aTimeMinutes;
+      const bAdjusted = bTimeMinutes < currentMinutes ? bTimeMinutes + 1440 : bTimeMinutes;
+      
+      return aAdjusted - bAdjusted;
+    })[0];
 
   if (userRole === 'caregiver') {
     return (

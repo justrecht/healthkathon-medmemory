@@ -183,6 +183,32 @@ export async function scheduleReminderNotification(
 
   const notificationIds: string[] = [];
 
+  // Helper function to check if a recurring notification would trigger very soon
+  const wouldTriggerSoon = (dayIndex: number, hour: number, minute: number): boolean => {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    // If it's for today and the time hasn't passed, check if it's within 3 minutes
+    if (dayIndex === currentDay) {
+      const targetTime = hour * 60 + minute;
+      const currentTime = currentHour * 60 + currentMinute;
+      const timeDiff = targetTime - currentTime;
+      
+      // If time difference is between 0 and 3 minutes, it would trigger too soon
+      if (timeDiff >= 0 && timeDiff <= 3) {
+        return true;
+      }
+      // If time has already passed, it won't trigger today
+      if (timeDiff < 0) {
+        return false;
+      }
+    }
+    
+    return false;
+  };
+
   // If repeatDays is provided, use recurring notifications
   if (medication.repeatDays && medication.repeatDays.length > 0) {
     console.log(`📅 Scheduling recurring notifications for ${medication.title} on ${medication.repeatDays.length} days at ${medication.time}`);
@@ -217,11 +243,8 @@ export async function scheduleReminderNotification(
           }
         }
 
-        // Check if this would trigger immediately
-        const isBeforeToday = beforeDayIndex === currentDay;
-        const isBeforePastTime = isBeforeToday && (beforeHour < currentHour || (beforeHour === currentHour && beforeMinute <= currentMinute + 1));
-        
-        if (!isBeforePastTime) {
+        // Check if this would trigger too soon
+        if (!wouldTriggerSoon(beforeDayIndex, beforeHour, beforeMinute)) {
           const beforeId = await Notifications.scheduleNotificationAsync({
             content: {
               title: "🔔 Pengingat Obat",
@@ -242,11 +265,8 @@ export async function scheduleReminderNotification(
         }
       }
 
-      // 1. On Time Notification - Only schedule if not immediately triggering
-      const isToday = dayIndex === currentDay;
-      const isPastTime = isToday && (hours < currentHour || (hours === currentHour && minutes <= currentMinute + 1));
-      
-      if (!isPastTime) {
+      // 1. On Time Notification - Only schedule if not triggering too soon
+      if (!wouldTriggerSoon(dayIndex, hours, minutes)) {
         const onTimeId = await Notifications.scheduleNotificationAsync({
           content: {
             title: "⏰ Waktunya Minum Obat!",
@@ -287,11 +307,8 @@ export async function scheduleReminderNotification(
         }
       }
 
-      // Check if this would trigger immediately
-      const isAfterToday = afterDayIndex === currentDay;
-      const isAfterPastTime = isAfterToday && (afterHour < currentHour || (afterHour === currentHour && afterMinute <= currentMinute + 1));
-      
-      if (!isAfterPastTime) {
+      // Check if this would trigger too soon
+      if (!wouldTriggerSoon(afterDayIndex, afterHour, afterMinute)) {
         const afterId = await Notifications.scheduleNotificationAsync({
           content: {
             title: "❗ Udah minum obat belum?",
@@ -318,8 +335,8 @@ export async function scheduleReminderNotification(
     // Set local device time directly
     scheduledTime.setHours(hours, minutes, 0, 0);
 
-    // If the time has passed today (with 1 minute buffer), schedule for tomorrow
-    if (scheduledTime.getTime() <= now.getTime() + 60000) {
+    // If the time has passed today (with 2 minute buffer), schedule for tomorrow
+    if (scheduledTime.getTime() <= now.getTime() + 120000) {
       scheduledTime.setDate(scheduledTime.getDate() + 1);
     }
 
@@ -329,7 +346,7 @@ export async function scheduleReminderNotification(
     const beforeTime = new Date(scheduledTime.getTime() - 30 * 60 * 1000);
     
     // Schedule notification 30 minutes before (only if in future AND enabled)
-    if (enableBeforeNotification && beforeTime.getTime() > now.getTime() + 60000) {
+    if (enableBeforeNotification && beforeTime.getTime() > now.getTime() + 120000) {
       const beforeNotificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: "🔔 Pengingat Obat",

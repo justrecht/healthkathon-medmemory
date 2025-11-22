@@ -22,6 +22,7 @@ export function MedicationHistoryModal({
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("id-ID", {
+      weekday: "long",
       day: "numeric",
       month: "short",
       year: "numeric",
