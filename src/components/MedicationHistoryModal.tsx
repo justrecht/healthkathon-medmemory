@@ -10,12 +10,14 @@ interface MedicationHistoryModalProps {
   visible: boolean;
   onClose: () => void;
   medicationHistory: MedicationRecord[];
+  onClearAll?: () => void;
 }
 
 export function MedicationHistoryModal({
   visible,
   onClose,
   medicationHistory,
+  onClearAll,
 }: MedicationHistoryModalProps) {
   const { theme } = useTheme();
 
@@ -80,9 +82,16 @@ export function MedicationHistoryModal({
               {medicationHistory.length} catatan
             </ThemedText>
           </View>
-          <Pressable onPress={onClose} style={styles.closeButton}>
-            <FontAwesome6 name="xmark" size={24} color={theme.colors.textPrimary} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {onClearAll && medicationHistory.length > 0 && (
+              <Pressable onPress={onClearAll} style={[styles.closeButton]}>
+                <FontAwesome6 name="trash" size={20} color="#FF6B6B" />
+              </Pressable>
+            )}
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <FontAwesome6 name="xmark" size={24} color={theme.colors.textPrimary} />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView

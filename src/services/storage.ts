@@ -1,15 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    orderBy,
-    query,
-    setDoc,
-    updateDoc,
-    where,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -180,6 +181,25 @@ export async function updateMedicationRecord(id: string, updates: Partial<Medica
     return true;
   } catch (error) {
     console.error("Error updating medication record:", error);
+    return false;
+  }
+}
+
+export async function clearMedicationHistory(userId?: string): Promise<boolean> {
+  try {
+    const collectionRef = await getStoragePath("medication_history", userId);
+    const snapshot = await getDocs(collectionRef);
+    
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+    
+    await batch.commit();
+    console.log(`Cleared ${snapshot.docs.length} medication history records`);
+    return true;
+  } catch (error) {
+    console.error("Error clearing medication history:", error);
     return false;
   }
 }

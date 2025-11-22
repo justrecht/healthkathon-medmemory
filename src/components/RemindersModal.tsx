@@ -12,6 +12,7 @@ type ReminderItem = {
   time: string;
   notes?: string;
   status: "scheduled" | "taken" | "missed";
+  repeatDays?: number[];
 };
 
 interface RemindersModalProps {
@@ -19,10 +20,19 @@ interface RemindersModalProps {
   onClose: () => void;
   reminders: ReminderItem[];
   onSelect?: (reminder: ReminderItem) => void;
+  onDelete?: (reminderId: string) => void;
 }
 
-export function RemindersModal({ visible, onClose, reminders, onSelect }: RemindersModalProps) {
+export function RemindersModal({ visible, onClose, reminders, onSelect, onDelete }: RemindersModalProps) {
   const { theme } = useTheme();
+
+  const getDayLabels = (repeatDays?: number[]) => {
+    if (!repeatDays || repeatDays.length === 0) return "Tidak ada hari";
+    if (repeatDays.length === 7) return "Setiap hari";
+    
+    const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+    return repeatDays.map(d => dayNames[d]).join(", ");
+  };
 
   return (
     <Modal
@@ -59,12 +69,25 @@ export function RemindersModal({ visible, onClose, reminders, onSelect }: Remind
                 </View>
                 <View style={{ flex: 1 }}>
                   <ThemedText weight="600">{item.title}</ThemedText>
+                  <ThemedText variant="caption" color="secondary">{getDayLabels(item.repeatDays)}</ThemedText>
                   {!!item.notes && <ThemedText variant="caption" color="muted">{item.notes}</ThemedText>}
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
                   <ThemedText>{item.time}</ThemedText>
                   <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
                 </View>
+                {onDelete && (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onDelete(item.id);
+                    }}
+                    style={[styles.deleteButton, { backgroundColor: 'rgba(255, 107, 107, 0.1)' }]}
+                    hitSlop={8}
+                  >
+                    <FontAwesome6 name="trash-can" size={14} color="#FF6B6B" />
+                  </Pressable>
+                )}
               </Pressable>
             ))}
           </View>
@@ -99,6 +122,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },

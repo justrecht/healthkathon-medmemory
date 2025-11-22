@@ -37,6 +37,7 @@ import {
 } from "../../src/services/notifications";
 import {
     calculateAdherence,
+    clearMedicationHistory,
     createReminder as createReminderInStore,
     deleteReminder as deleteReminderInStore,
     getDailyAdherence,
@@ -667,11 +668,16 @@ export default function HomeScreen() {
   // Check for missed medications and notify caregivers
   useEffect(() => {
     const checkMissedMedications = setInterval(async () => {
+      if (!auth.currentUser) return;
+      
       const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      const currentDay = now.getDay();
       
       for (const reminder of reminders) {
-        if (reminder.status === "scheduled") {
+        // Check if medication is scheduled for today and status is still "scheduled"
+        const isScheduledToday = !reminder.repeatDays || reminder.repeatDays.includes(currentDay);
+        
+        if (reminder.status === "scheduled" && isScheduledToday) {
           const [schedHour, schedMin] = reminder.time.split(":").map(Number);
           const scheduledTime = new Date();
           scheduledTime.setHours(schedHour, schedMin, 0, 0);
@@ -679,14 +685,23 @@ export default function HomeScreen() {
           // If 30 minutes past scheduled time and not confirmed
           const timeDiff = now.getTime() - scheduledTime.getTime();
           if (timeDiff > 30 * 60 * 1000 && timeDiff < 35 * 60 * 1000) {
-            // Notify caregivers
-            const activeCaregivers = caregivers.filter((c) => c.status === "active");
-            for (const caregiver of activeCaregivers) {
-              await sendCaregiverNotification(
-                caregiver.name,
-                reminder.title,
-                "Pasien"
-              );
+            // Notify caregivers about missed medication
+            if (caregivers.length > 0) {
+              const patientName = auth.currentUser.displayName || "Pasien";
+              const patientId = auth.currentUser.uid;
+              
+              console.log(`⚠️ Medication missed: ${reminder.title} at ${reminder.time}. Notifying ${caregivers.length} caregiver(s)...`);
+              
+              for (const caregiver of caregivers) {
+                await sendCaregiverNotification(
+                  caregiver.id,
+                  caregiver.name || caregiver.email,
+                  reminder.title,
+                  patientId,
+                  patientName,
+                  reminder.time
+                );
+              }
             }
           }
         }
@@ -1344,6 +1359,43 @@ export default function HomeScreen() {
         visible={showHistoryModal}
         onClose={() => setShowHistoryModal(false)}
         medicationHistory={medicationHistory}
+        onClearAll={() => {
+          showAlert(
+            "Hapus Semua Riwayat",
+            "Yakin mau hapus semua riwayat konsumsi obat? Tindakan ini tidak bisa dibatalkan.",
+            [
+              { text: "Batal", style: "cancel" },
+              {
+                text: "Hapus Semua",
+                style: "destructive",
+                onPress: async () => {
+                  const success = await clearMedicationHistory();
+                  if (success) {
+                    setMedicationHistory([]);
+                    setShowHistoryModal(false);
+                    showAlert(
+                      "Berhasil",
+                      "Semua riwayat sudah dihapus",
+                      [{ text: "OK" }],
+                      "check-circle",
+                      "#10D99D"
+                    );
+                  } else {
+                    showAlert(
+                      "Error",
+                      "Gagal menghapus riwayat",
+                      [{ text: "OK" }],
+                      "triangle-exclamation",
+                      "#FF8585"
+                    );
+                  }
+                },
+              },
+            ],
+            "trash",
+            theme.colors.danger
+          );
+        }}
       />
 
       <CustomAlert
@@ -1363,6 +1415,12 @@ export default function HomeScreen() {
         onSelect={(item) => {
           setShowAllReminders(false);
           handleStartEdit(item);
+        }}
+        onDelete={(reminderId) => {
+          const item = reminders.find(r => r.id === reminderId);
+          if (item) {
+            confirmDelete(item);
+          }
         }}
       />
     </SafeAreaView>

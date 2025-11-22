@@ -141,8 +141,9 @@ export async function scheduleReminderNotification(
       const stillValid = existing.filter(id => existingIds.has(id));
       
       // Check if we have the expected number of notifications
+      // For recurring (repeatDays) we now only schedule on-time + after (2 each per day)
       const expectedCount = medication.repeatDays?.length 
-        ? medication.repeatDays.length * (enableBeforeNotification ? 3 : 2)
+        ? medication.repeatDays.length * 2
         : (enableBeforeNotification ? 3 : 2);
       
       if (stillValid.length === existing.length && stillValid.length >= expectedCount) {
@@ -220,113 +221,49 @@ export async function scheduleReminderNotification(
     const currentMinute = now.getMinutes();
     
     for (const dayIndex of medication.repeatDays) {
-      // Expo: 1=Sun, 7=Sat. JS: 0=Sun, 6=Sat.
-      const weekday = dayIndex + 1;
-      console.log(`   Scheduling for ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayIndex]} (weekday: ${weekday}) at ${hours}:${minutes.toString().padStart(2, '0')}`);
+      const weekday = dayIndex + 1; // Expo weekday
+      const dayLabel = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIndex];
+      const daysAhead = (dayIndex - currentDay + 7) % 7; // offset (0..6)
+      const targetDate = new Date();
+      targetDate.setHours(hours, minutes, 0, 0);
+      targetDate.setDate(targetDate.getDate() + daysAhead);
 
-      // 2. Before Notification (30 mins before) - Only if enabled and not in the past
-      if (enableBeforeNotification) {
-        let beforeHour = hours;
-        let beforeMinute = minutes - 30;
-        let beforeWeekday = weekday;
-        let beforeDayIndex = dayIndex;
-        
-        // Adjust if time goes negative
-        if (beforeMinute < 0) {
-          beforeMinute += 60;
-          beforeHour -= 1;
-          
-          if (beforeHour < 0) {
-            beforeHour += 24;
-            beforeWeekday = weekday === 1 ? 7 : weekday - 1;
-            beforeDayIndex = dayIndex === 0 ? 6 : dayIndex - 1;
-          }
-        }
-
-        // Check if this would trigger too soon
-        if (!wouldTriggerSoon(beforeDayIndex, beforeHour, beforeMinute)) {
-          const beforeId = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: "🔔 Pengingat Obat",
-              body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
-              data: { medicationId: medication.id, type: "before" },
-              sound: true,
-              // @ts-ignore
-              channelId: "medication-reminders",
-            },
-            trigger: {
-              weekday: beforeWeekday,
-              hour: beforeHour,
-              minute: beforeMinute,
-              repeats: true,
-            } as any,
-          });
-          notificationIds.push(beforeId);
-        }
+      // If the scheduled time has already passed for this occurrence, schedule for next week
+      if (targetDate.getTime() <= Date.now()) {
+        targetDate.setDate(targetDate.getDate() + 7);
       }
 
-      // 1. On Time Notification - Only schedule if not triggering too soon
-      if (!wouldTriggerSoon(dayIndex, hours, minutes)) {
-        const onTimeId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "⏰ Waktunya Minum Obat!",
-            body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
-            data: { medicationId: medication.id, type: "ontime" },
-            sound: true,
-            // @ts-ignore
-            channelId: "medication-reminders",
-          },
-          trigger: {
-            weekday: weekday,
-            hour: hours,
-            minute: minutes,
-            repeats: true,
-          } as any,
-        });
-        notificationIds.push(onTimeId);
-        console.log(`   ✓ Scheduled ontime notification (will fire on next ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayIndex]})`);
-      } else {
-        console.log(`   ⏭ Skipping ontime notification (would fire immediately for today's past time)`);
-      }
+      // Kita selalu jadwalkan occurrence pertama sebagai one-time date (bukan repeat) agar Android tidak memicu langsung.
+      // Setelah menembak, listener akan mengubahnya jadi weekly repeat.
+      const onTimeId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '⏰ Waktunya Minum Obat!',
+          body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ''}`,
+          data: { medicationId: medication.id, type: 'ontime', oneTime: true },
+          sound: true,
+          // @ts-ignore
+          channelId: 'medication-reminders',
+        },
+        trigger: { channelId: 'medication-reminders', date: targetDate } as any,
+      });
+      notificationIds.push(onTimeId);
+      console.log(`   ▶ Scheduled first on-time (one-time) for ${dayLabel} at ${targetDate.toLocaleString()}`);
 
-      // 3. After Notification (10 mins after) - Only if not in the past
-      let afterHour = hours;
-      let afterMinute = minutes + 10;
-      let afterWeekday = weekday;
-      let afterDayIndex = dayIndex;
-      
-      // Adjust if time goes past 59 minutes
-      if (afterMinute >= 60) {
-        afterMinute -= 60;
-        afterHour += 1;
-        
-        if (afterHour >= 24) {
-          afterHour -= 24;
-          afterWeekday = weekday === 7 ? 1 : weekday + 1;
-          afterDayIndex = dayIndex === 6 ? 0 : dayIndex + 1;
-        }
-      }
-
-      // Check if this would trigger too soon
-      if (!wouldTriggerSoon(afterDayIndex, afterHour, afterMinute)) {
-        const afterId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "❗ Udah minum obat belum?",
-            body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
-            data: { medicationId: medication.id, type: "after" },
-            sound: true,
-            // @ts-ignore
-            channelId: "medication-reminders",
-          },
-          trigger: {
-            weekday: afterWeekday,
-            hour: afterHour,
-            minute: afterMinute,
-            repeats: true,
-          } as any,
-        });
-        notificationIds.push(afterId);
-      }
+      // AFTER (+10 menit)
+      const afterDate = new Date(targetDate.getTime() + 10 * 60 * 1000);
+      const afterId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '❗ Udah minum obat belum?',
+          body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+          data: { medicationId: medication.id, type: 'after', oneTime: true },
+          sound: true,
+          // @ts-ignore
+          channelId: 'medication-reminders',
+        },
+        trigger: { channelId: 'medication-reminders', date: afterDate } as any,
+      });
+      notificationIds.push(afterId);
+      console.log(`   ▶ Scheduled first after (+10m) one-time for ${dayLabel} at ${afterDate.toLocaleString()}`);
     }
   } else {
     // Legacy/One-time logic
@@ -432,20 +369,96 @@ export async function cancelAllNotifications() {
 }
 
 export async function sendCaregiverNotification(
+  caregiverId: string,
   caregiverName: string,
   medicationName: string,
-  patientName: string
+  patientId: string,
+  patientName: string,
+  scheduledTime: string
 ) {
-  // This would typically send via API to caregiver's device
-  // For now, we'll show a local notification as demonstration
+  try {
+    // Import Firestore functions
+    const { collection, addDoc } = await import('firebase/firestore');
+    const { db } = await import('../config/firebase');
+
+    // Store notification in Firestore for the caregiver
+    const notificationData = {
+      type: 'missed_medication',
+      caregiverId,
+      patientId,
+      patientName,
+      medicationName,
+      scheduledTime,
+      message: `${patientName} melewatkan jadwal minum obat ${medicationName} pada ${scheduledTime}`,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    await addDoc(collection(db, 'caregiver_notifications'), notificationData);
+    console.log(`📨 Notification sent to caregiver ${caregiverName} about missed medication: ${medicationName}`);
+
+    // Also send a local notification (for demo purposes or if caregiver is using the same device)
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "🚨 Pasien Melewatkan Obat",
+        body: `${patientName} belum minum ${medicationName} yang dijadwalkan jam ${scheduledTime}`,
+        data: { 
+          type: "caregiver-alert",
+          patientId,
+          medicationName,
+          scheduledTime,
+        },
+        sound: true,
+      },
+      trigger: null, // Send immediately
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending caregiver notification:', error);
+    return { success: false, error };
+  }
+}
+
+export async function scheduleCaregiversMissedNotification(
+  medication: {
+    id: string;
+    title: string;
+    time: string;
+  },
+  patientId: string,
+  patientName: string,
+  caregivers: Array<{ id: string; name: string }>
+) {
+  // Schedule a notification to be sent to caregivers 30 minutes after scheduled time
+  // if the medication hasn't been confirmed
+  const [hours, minutes] = medication.time.split(':').map(Number);
+  const notificationTime = new Date();
+  notificationTime.setHours(hours, minutes + 30, 0, 0);
+
+  // If the time has already passed today, schedule for tomorrow
+  if (notificationTime.getTime() <= Date.now()) {
+    notificationTime.setDate(notificationTime.getDate() + 1);
+  }
+
+  console.log(`⏰ Scheduling caregiver missed notification for ${medication.title} at ${notificationTime.toLocaleString()}`);
+
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "🚨 Notifikasi untuk Caregiver",
-      body: `${patientName} belum mengonfirmasi konsumsi ${medicationName}`,
-      data: { type: "caregiver-alert" },
+      title: "⚠️ Cek Status Pasien",
+      body: `Waktu untuk cek apakah pasien ${patientName} sudah minum ${medication.title}`,
+      data: {
+        type: "caregiver-check",
+        medicationId: medication.id,
+        patientId,
+        caregivers: JSON.stringify(caregivers),
+      },
       sound: true,
     },
-    trigger: null, // Send immediately
+    trigger: {
+      channelId: "medication-reminders",
+      date: notificationTime,
+    },
   });
 }
 
@@ -470,4 +483,72 @@ export function addNotificationResponseListener(
   callback: (response: Notifications.NotificationResponse) => void
 ) {
   return Notifications.addNotificationResponseReceivedListener(callback);
+}
+
+// Listener untuk menjemput notifikasi yang bersifat one-time (karena waktu sudah lewat hari ini)
+// Setelah notifikasi one-time (ontime/after) dikirim, kita jadwalkan ulang menjadi weekly repeat normal.
+export function addNotificationReceivedListener() {
+  return Notifications.addNotificationReceivedListener(async (notification) => {
+    try {
+      const data: any = notification.request.content.data;
+      if (!data || !data.oneTime || !data.medicationId) return;
+      const medId = data.medicationId as string;
+      const type = data.type as string;
+      // Ambil detail reminder dari storage
+      const reminders = await (await import('./storage')).getReminders();
+      const medication = reminders.find(r => r.id === medId);
+      if (!medication) return;
+
+      const [h, m] = medication.time.split(':').map(Number);
+      const now = new Date();
+      let jsWeekday = now.getDay(); // hari aktual saat notifikasi pertama menembak (mutable)
+      let expoWeekday = jsWeekday + 1; // format expo
+
+      // Jika reminder memiliki repeatDays, kita gunakan weekday sesuai mapping repeatDays agar align hari.
+      // Cari index yang cocok dengan jsWeekday; kalau tidak ada, fallback ke jsWeekday agar tetap ter-repeat.
+      if (medication.repeatDays && medication.repeatDays.length > 0) {
+        if (!medication.repeatDays.includes(jsWeekday)) {
+          // Pilih hari pertama dalam daftar repeatDays untuk repeat mingguan berikutnya
+          const chosen = medication.repeatDays[0];
+          jsWeekday = chosen;
+          expoWeekday = jsWeekday + 1;
+        }
+      }
+
+      // Hanya jadwalkan ulang untuk tipe utama (ontime/after) agar pola mingguan kembali.
+      if (type === 'ontime') {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '⏰ Waktunya Minum Obat!',
+            body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ''}`,
+            data: { medicationId: medId, type: 'ontime' },
+            sound: true,
+            // @ts-ignore
+            channelId: 'medication-reminders',
+          },
+          trigger: { weekday: expoWeekday, hour: h, minute: m, repeats: true } as any,
+        });
+      }
+      if (type === 'after') {
+        let afterHour = h;
+        let afterMinute = m + 10;
+        if (afterMinute >= 60) { afterMinute -= 60; afterHour += 1; }
+        if (afterHour >= 24) { afterHour -= 24; }
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '❗ Udah minum obat belum?',
+            body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+            data: { medicationId: medId, type: 'after' },
+            sound: true,
+            // @ts-ignore
+            channelId: 'medication-reminders',
+          },
+            trigger: { weekday: expoWeekday, hour: afterHour, minute: afterMinute, repeats: true } as any,
+        });
+      }
+      console.log(`🔁 Auto-rescheduled weekly notifications for ${medication.title} (type: ${type})`);
+    } catch (err) {
+      console.warn('Failed to auto-reschedule weekly notification', err);
+    }
+  });
 }

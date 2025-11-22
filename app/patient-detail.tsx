@@ -121,18 +121,28 @@ export default function PatientDetailScreen() {
           <SectionHeader title="Jadwal Obat" subtitle="Pengingat aktif pasien" />
           {reminders.length > 0 ? (
             <View style={{ gap: 12 }}>
-              {reminders.map((reminder) => (
-                <View key={reminder.id} style={[styles.reminderRow, { borderBottomColor: theme.colors.border }]}>
-                  <View style={[styles.iconBox, { backgroundColor: theme.colors.cardMuted }]}>
-                    <FontAwesome6 name="clock" color={theme.colors.accent} size={14} />
+              {reminders.map((reminder) => {
+                const getDayLabels = (repeatDays?: number[]) => {
+                  if (!repeatDays || repeatDays.length === 0) return "Tidak ada hari";
+                  if (repeatDays.length === 7) return "Setiap hari";
+                  const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+                  return repeatDays.map(d => dayNames[d]).join(", ");
+                };
+
+                return (
+                  <View key={reminder.id} style={[styles.reminderRow, { borderBottomColor: theme.colors.border }]}>
+                    <View style={[styles.iconBox, { backgroundColor: theme.colors.cardMuted }]}>
+                      <FontAwesome6 name="clock" color={theme.colors.accent} size={14} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText weight="600">{reminder.title}</ThemedText>
+                      <ThemedText variant="caption" color="secondary">{getDayLabels(reminder.repeatDays)}</ThemedText>
+                      <ThemedText variant="caption" color="muted">{reminder.dosage}</ThemedText>
+                    </View>
+                    <ThemedText weight="600">{reminder.time}</ThemedText>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText weight="600">{reminder.title}</ThemedText>
-                    <ThemedText variant="caption" color="muted">{reminder.dosage}</ThemedText>
-                  </View>
-                  <ThemedText weight="600">{reminder.time}</ThemedText>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <ThemedText color="muted" style={{ textAlign: 'center', padding: 16 }}>Belum ada jadwal obat</ThemedText>
