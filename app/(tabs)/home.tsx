@@ -734,7 +734,7 @@ export default function HomeScreen() {
 
   if (userRole === 'caregiver') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: mode === "dark" ? "#000000" : "#F2F2F7" }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <StatusBar style={mode === "dark" ? "light" : "dark"} />
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
@@ -747,12 +747,12 @@ export default function HomeScreen() {
               </Text>
               <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>{t("summary")}</Text>
             </View>
-            <Pressable style={[styles.profileButton, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#E5E5EA" }]}>
+            <Pressable style={[styles.profileButton, { backgroundColor: theme.colors.cardMuted }]}>
               <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={20} />
             </Pressable>
           </View>
 
-          <View style={[styles.summaryCard, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF" }]}>
+          <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
              <View style={styles.summaryHeader}>
                 <View>
                   <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>{t("caregiverMode")}</Text>
@@ -777,13 +777,13 @@ export default function HomeScreen() {
                     styles.caregiverRow, 
                     { 
                       marginBottom: 0,
-                      backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF",
+                      backgroundColor: theme.colors.card,
                       borderRadius: 12
                     }
                   ]}
                   onPress={() => router.push({ pathname: "/patient-detail", params: { patientId: patient.uid } })}
                 >
-                  <View style={[styles.reminderIcon, { backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }]}>
+                  <View style={[styles.reminderIcon, { backgroundColor: theme.colors.cardMuted }]}>
                     <FontAwesome6 name="user" color={theme.colors.accent} size={16} />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -793,7 +793,7 @@ export default function HomeScreen() {
                   <FontAwesome6 name="chevron-right" color={theme.colors.muted} size={14} />
                 </Pressable>
               )) : (
-                <View style={[styles.emptyState, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF", borderRadius: 12, padding: 24 }]}>
+                <View style={[styles.emptyState, { backgroundColor: theme.colors.card, borderRadius: 12, padding: 24 }]}>
                   <FontAwesome6 name="users" color={theme.colors.muted} size={48} />
                   <ThemedText color="muted" style={styles.emptyStateTitle}>{t("noConnectedPatients")}</ThemedText>
                   <ThemedText variant="caption" color="muted">{t("connectPatientsDesc")}</ThemedText>
@@ -831,7 +831,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: mode === "dark" ? "#000000" : "#F2F2F7" }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
@@ -844,13 +844,13 @@ export default function HomeScreen() {
             </Text>
             <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>{t("summary")}</Text>
           </View>
-          <Pressable style={[styles.profileButton, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#E5E5EA" }]}>
+          <Pressable style={[styles.profileButton, { backgroundColor: theme.colors.cardMuted }]}>
             <FontAwesome6 name="user" color={theme.colors.accent} size={20} />
           </Pressable>
         </View>
 
         <LinearGradient
-          colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+          colors={[theme.colors.card, theme.colors.cardMuted]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.summaryCard}
@@ -900,7 +900,7 @@ export default function HomeScreen() {
             
             <View style={styles.progressBarContainer}>
               <View style={[styles.progressBarBackground, { 
-                backgroundColor: mode === "dark" ? "#2C2C2E" : "#E5E5EA",
+                backgroundColor: theme.colors.cardMuted,
                 shadowColor: mode === "dark" ? "#000" : "#000",
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: mode === "dark" ? 0.5 : 0.1,
@@ -936,7 +936,7 @@ export default function HomeScreen() {
                 <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{reminders.filter(r => !r.repeatDays || r.repeatDays.includes(new Date().getDay())).length}</Text>
                 <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t("todaySchedule")}</Text>
              </View>
-             <View style={[styles.statItem, { borderLeftWidth: 1, borderLeftColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', paddingLeft: 20 }]}>
+             <View style={[styles.statItem, { borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 20 }]}>
                 <LinearGradient
                   colors={[mode === "dark" ? "rgba(52,199,89,0.3)" : "rgba(52,199,89,0.15)", mode === "dark" ? "rgba(52,199,89,0.1)" : "rgba(52,199,89,0.05)"]}
                   start={{ x: 0, y: 0 }}
@@ -966,13 +966,13 @@ export default function HomeScreen() {
                       flexDirection: 'column',
                       alignItems: 'flex-start',
                       gap: 12,
-                      backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF",
+                      backgroundColor: theme.colors.card,
                       borderRadius: 12
                     }
                   ]}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                    <View style={[styles.reminderIcon, { backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }]}>
+                    <View style={[styles.reminderIcon, { backgroundColor: theme.colors.cardMuted }]}>
                       <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={16} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -983,7 +983,7 @@ export default function HomeScreen() {
                   
                   <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
                     <Pressable 
-                      style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }}
+                      style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: theme.colors.cardMuted }}
                       onPress={() => handleRespondRequest(request.id, false)}
                     >
                       <ThemedText variant="caption" weight="600" style={{ color: "#FF3B30", fontSize: 15 }}>{t("reject")}</ThemedText>
@@ -1011,7 +1011,7 @@ export default function HomeScreen() {
           <View style={styles.cardContainer}>
             {nextReminder ? (
               <LinearGradient
-                colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+                colors={mode === "dark" ? [theme.colors.card, theme.colors.card] : ["#FFFFFF", "#F8F9FA"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
                 style={{ borderRadius: 16 }}
@@ -1029,7 +1029,7 @@ export default function HomeScreen() {
                     <ThemedText variant="subheading" weight="600" style={{ fontSize: 19 }}>
                       {nextReminder.title}
                     </ThemedText>
-                    <View style={[styles.dosageBadge, { backgroundColor: mode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)" }]}>
+                    <View style={[styles.dosageBadge, { backgroundColor: theme.colors.cardMuted }]}>
                       <ThemedText weight="600" style={{ fontSize: 14, color: theme.colors.accent }}>{nextReminder.dosage}</ThemedText>
                     </View>
                     {nextReminder.notes ? <ThemedText variant="caption" color="muted" style={{ marginTop: 4 }}>{nextReminder.notes}</ThemedText> : null}
@@ -1059,7 +1059,7 @@ export default function HomeScreen() {
               </LinearGradient>
             ) : (
               <LinearGradient
-                colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+                colors={mode === "dark" ? [theme.colors.card, theme.colors.card] : ["#FFFFFF", "#F8F9FA"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
                 style={{ borderRadius: 16 }}
@@ -1080,7 +1080,7 @@ export default function HomeScreen() {
              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>{t("last7Days")}</Text>
           </View>
           <LinearGradient
-            colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+            colors={mode === "dark" ? [theme.colors.card, theme.colors.card] : ["#FFFFFF", "#F8F9FA"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.cardContainer}
@@ -1107,7 +1107,7 @@ export default function HomeScreen() {
                         style={[
                           styles.timelineBarContainer,
                           { 
-                            backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7",
+                            backgroundColor: theme.colors.cardMuted,
                             borderWidth: isToday ? 2 : 0,
                             borderColor: theme.colors.accent,
                           },
@@ -1139,7 +1139,7 @@ export default function HomeScreen() {
                       <View style={[
                         styles.timelineLabelContainer,
                         isToday && { 
-                          backgroundColor: mode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)",
+                          backgroundColor: theme.colors.cardMuted,
                           paddingHorizontal: 8,
                           paddingVertical: 4,
                           borderRadius: 8,
@@ -1180,7 +1180,7 @@ export default function HomeScreen() {
             )}
           </View>
           <LinearGradient
-            colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+            colors={mode === "dark" ? [theme.colors.card, theme.colors.card] : ["#FFFFFF", "#F8F9FA"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.cardContainer}
@@ -1204,15 +1204,15 @@ export default function HomeScreen() {
                           styles.reminderRow,
                           {
                             borderBottomWidth: index === arr.length - 1 ? 0 : 0.5,
-                            borderBottomColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : '#C6C6C8',
+                            borderBottomColor: theme.colors.border,
                           },
                         ]}
                       >
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
                           <LinearGradient
                             colors={[
-                              mode === "dark" ? "rgba(0,122,255,0.3)" : "rgba(0,122,255,0.15)",
-                              mode === "dark" ? "rgba(0,122,255,0.1)" : "rgba(0,122,255,0.05)"
+                              theme.colors.cardMuted,
+                              theme.colors.cardMuted
                             ]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
@@ -1226,7 +1226,7 @@ export default function HomeScreen() {
                             {item.repeatDays && item.repeatDays.length < 7 && (
                               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                                 {item.repeatDays.sort((a: number, b: number) => a - b).map((day: number) => (
-                                  <View key={day} style={{ backgroundColor: mode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                  <View key={day} style={{ backgroundColor: theme.colors.cardMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                                     <ThemedText style={{ fontSize: 11, color: theme.colors.accent }}>
                                       {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][day]}
                                     </ThemedText>
@@ -1246,7 +1246,7 @@ export default function HomeScreen() {
                             onPress={() => handleStartEdit(item)}
                             style={{
                               padding: 8,
-                              backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7",
+                              backgroundColor: theme.colors.cardMuted,
                               borderRadius: 8,
                             }}
                           >
@@ -1285,7 +1285,7 @@ export default function HomeScreen() {
              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("caregiver")}</Text>
           </View>
           <LinearGradient
-            colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+            colors={mode === "dark" ? [theme.colors.card, theme.colors.card] : ["#FFFFFF", "#F8F9FA"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.cardContainer}
@@ -1323,7 +1323,7 @@ export default function HomeScreen() {
                 </View>
               );
             })()}
-            <View style={[styles.caregiverActions, { borderTopColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
+            <View style={[styles.caregiverActions, { borderTopColor: theme.colors.border }]}>
               <Pressable onPress={handleViewHistory} style={{ flex: 1 }}>
                 <View style={[styles.caregiverAction, { backgroundColor: 'transparent' }]}>
                   <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
