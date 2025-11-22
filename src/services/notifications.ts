@@ -60,36 +60,30 @@ export async function dedupeMedicationNotifications() {
   try {
     const all = await Notifications.getAllScheduledNotificationsAsync();
     // Group by medicationId + type + weekday (to handle recurring correctly)
-    const groups = new Map<string, Array<{ id: string; date: number }>>();
+    const groups = new Map<string, Array<{ id: string; trigger: any }>>();
     for (const n of all) {
       const medId = (n.content?.data as any)?.medicationId as string | undefined;
       const type = (n.content?.data as any)?.type as string | undefined;
       const trigger = n.trigger as any;
-      const dateVal = trigger?.date ? new Date(trigger.date).getTime() : 0;
-      const weekday = trigger?.weekday ?? 0; // 0 for non-recurring or if not present
+      const weekday = trigger?.weekday ?? 'none';
+      const hour = trigger?.hour ?? 'none';
+      const minute = trigger?.minute ?? 'none';
 
       if (!medId || !type) continue;
       
-      // Key includes weekday so we don't merge Mon/Tue/etc into one group
-      const key = `${medId}:${type}:${weekday}`;
+      // Key includes weekday, hour, and minute so we only group exact duplicates
+      const key = `${medId}:${type}:${weekday}:${hour}:${minute}`;
       const arr = groups.get(key) || [];
-      arr.push({ id: n.identifier, date: dateVal });
+      arr.push({ id: n.identifier, trigger });
       groups.set(key, arr);
     }
 
-    const toKeep = new Set<string>();
     const toCancel: string[] = [];
     for (const [key, arr] of groups.entries()) {
-      // Keep the soonest upcoming notification (largest past might be 0); pick max date
-      const sorted = arr.sort((a, b) => a.date - b.date);
-      if (sorted.length > 0) {
-        // keep the latest future or if none, keep the last one
-        const now = Date.now();
-        const future = sorted.filter((x) => x.date >= now);
-        const keep = (future[0] ?? sorted[sorted.length - 1]).id;
-        toKeep.add(keep);
-        for (const s of sorted) {
-          if (s.id !== keep) toCancel.push(s.id);
+      // If there are duplicates for the exact same time slot, keep only the first one
+      if (arr.length > 1) {
+        for (let i = 1; i < arr.length; i++) {
+          toCancel.push(arr[i].id);
         }
       }
     }
@@ -127,7 +121,8 @@ export async function scheduleReminderNotification(
     time: string;
     notes?: string;
     repeatDays?: number[];
-  }
+  },
+  forceReschedule: boolean = false
 ) {
   // Initialize from storage if not done yet
   await initializeScheduledNotifications();
@@ -136,28 +131,45 @@ export async function scheduleReminderNotification(
   const uiSettings = await getUISettings();
   const enableBeforeNotification = uiSettings.beforeSchedule;
 
-  // Check if notifications are already scheduled for this medication
-  const existing = scheduledNotifications.get(medication.id);
-  if (existing && existing.length > 0) {
-    // Verify if these notifications actually exist
-    const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
-    const existingIds = allScheduled.map(n => n.identifier);
-    const stillValid = existing.filter(id => existingIds.includes(id));
-    
-    // Only skip if ALL previously scheduled notifications are still valid
-    if (stillValid.length === existing.length) {
-      console.log(`Notifications already scheduled for ${medication.id} (${stillValid.length} active), skipping...`);
-      return {
-        beforeNotificationId: stillValid[0],
-        onTimeNotificationId: stillValid[1],
-        afterNotificationId: stillValid[2],
-      };
+  // Check if notifications are already scheduled and still valid
+  if (!forceReschedule) {
+    const existing = scheduledNotifications.get(medication.id);
+    if (existing && existing.length > 0) {
+      // Verify that these notifications actually exist in the system
+      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const existingIds = new Set(allScheduled.map(n => n.identifier));
+      const stillValid = existing.filter(id => existingIds.has(id));
+      
+      // Check if we have the expected number of notifications
+      const expectedCount = medication.repeatDays?.length 
+        ? medication.repeatDays.length * (enableBeforeNotification ? 3 : 2)
+        : (enableBeforeNotification ? 3 : 2);
+      
+      if (stillValid.length === existing.length && stillValid.length >= expectedCount) {
+        console.log(`✓ Notifications already scheduled for ${medication.title} (${stillValid.length}/${expectedCount} active), skipping...`);
+        return {
+          beforeNotificationId: stillValid[0],
+          onTimeNotificationId: stillValid[1],
+          afterNotificationId: stillValid[2],
+        };
+      }
+      
+      console.log(`⚠ Incomplete notifications for ${medication.title} (${stillValid.length}/${expectedCount}), rescheduling...`);
+      // Cancel incomplete set
+      for (const notifId of existing) {
+        await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
+      }
+      scheduledNotifications.delete(medication.id);
     }
-    
-    // If some are missing (or none exist), cancel any stragglers and reschedule fresh
-    console.log(`Partial or stale notifications found for ${medication.id} (found ${stillValid.length}/${existing.length}), rescheduling...`);
-    for (const notifId of existing) {
-      await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
+  } else {
+    // Force reschedule - cancel existing
+    const existing = scheduledNotifications.get(medication.id);
+    if (existing && existing.length > 0) {
+      console.log(`🔄 Force rescheduling ${existing.length} notifications for ${medication.title}...`);
+      for (const notifId of existing) {
+        await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
+      }
+      scheduledNotifications.delete(medication.id);
     }
   }
 
@@ -173,86 +185,131 @@ export async function scheduleReminderNotification(
 
   // If repeatDays is provided, use recurring notifications
   if (medication.repeatDays && medication.repeatDays.length > 0) {
-    console.log(`Scheduling recurring notifications for ${medication.title} on days: ${medication.repeatDays}`);
+    console.log(`📅 Scheduling recurring notifications for ${medication.title} on ${medication.repeatDays.length} days at ${medication.time}`);
+    console.log(`   Days selected: ${medication.repeatDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`);
+    
+    const now = new Date();
+    const currentDay = now.getDay();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
     
     for (const dayIndex of medication.repeatDays) {
       // Expo: 1=Sun, 7=Sat. JS: 0=Sun, 6=Sat.
       const weekday = dayIndex + 1;
+      console.log(`   Scheduling for ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayIndex]} (weekday: ${weekday}) at ${hours}:${minutes.toString().padStart(2, '0')}`);
 
-      // 1. On Time Notification
-      const onTimeId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "⏰ Waktunya Minum Obat!",
-          body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
-          data: { medicationId: medication.id, type: "ontime" },
-          sound: true,
-          // @ts-ignore
-          channelId: "medication-reminders",
-        },
-        trigger: {
-          weekday: weekday,
-          hour: hours,
-          minute: minutes,
-          repeats: true,
-        } as any,
-      });
-      notificationIds.push(onTimeId);
-
-      // 2. Before Notification (30 mins before) - Only if enabled
+      // 2. Before Notification (30 mins before) - Only if enabled and not in the past
       if (enableBeforeNotification) {
-        const beforeDate = new Date();
-        beforeDate.setHours(hours, minutes - 30, 0, 0);
+        let beforeHour = hours;
+        let beforeMinute = minutes - 30;
         let beforeWeekday = weekday;
-        // Adjust weekday if time rolled back to previous day
-        if (hours === 0 && minutes < 30) {
-          beforeWeekday = weekday === 1 ? 7 : weekday - 1;
+        let beforeDayIndex = dayIndex;
+        
+        // Adjust if time goes negative
+        if (beforeMinute < 0) {
+          beforeMinute += 60;
+          beforeHour -= 1;
+          
+          if (beforeHour < 0) {
+            beforeHour += 24;
+            beforeWeekday = weekday === 1 ? 7 : weekday - 1;
+            beforeDayIndex = dayIndex === 0 ? 6 : dayIndex - 1;
+          }
         }
 
-        const beforeId = await Notifications.scheduleNotificationAsync({
+        // Check if this would trigger immediately
+        const isBeforeToday = beforeDayIndex === currentDay;
+        const isBeforePastTime = isBeforeToday && (beforeHour < currentHour || (beforeHour === currentHour && beforeMinute <= currentMinute + 1));
+        
+        if (!isBeforePastTime) {
+          const beforeId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "🔔 Pengingat Obat",
+              body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
+              data: { medicationId: medication.id, type: "before" },
+              sound: true,
+              // @ts-ignore
+              channelId: "medication-reminders",
+            },
+            trigger: {
+              weekday: beforeWeekday,
+              hour: beforeHour,
+              minute: beforeMinute,
+              repeats: true,
+            } as any,
+          });
+          notificationIds.push(beforeId);
+        }
+      }
+
+      // 1. On Time Notification - Only schedule if not immediately triggering
+      const isToday = dayIndex === currentDay;
+      const isPastTime = isToday && (hours < currentHour || (hours === currentHour && minutes <= currentMinute + 1));
+      
+      if (!isPastTime) {
+        const onTimeId = await Notifications.scheduleNotificationAsync({
           content: {
-            title: "🔔 Pengingat Obat",
-            body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
-            data: { medicationId: medication.id, type: "before" },
+            title: "⏰ Waktunya Minum Obat!",
+            body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
+            data: { medicationId: medication.id, type: "ontime" },
             sound: true,
             // @ts-ignore
             channelId: "medication-reminders",
           },
           trigger: {
-            weekday: beforeWeekday,
-            hour: beforeDate.getHours(),
-            minute: beforeDate.getMinutes(),
+            weekday: weekday,
+            hour: hours,
+            minute: minutes,
             repeats: true,
           } as any,
         });
-        notificationIds.push(beforeId);
+        notificationIds.push(onTimeId);
+        console.log(`   ✓ Scheduled ontime notification (will fire on next ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayIndex]})`);
+      } else {
+        console.log(`   ⏭ Skipping ontime notification (would fire immediately for today's past time)`);
       }
 
-      // 3. After Notification (10 mins after)
-      const afterDate = new Date();
-      afterDate.setHours(hours, minutes + 10, 0, 0);
+      // 3. After Notification (10 mins after) - Only if not in the past
+      let afterHour = hours;
+      let afterMinute = minutes + 10;
       let afterWeekday = weekday;
-      // Adjust weekday if time rolled forward to next day
-      if (hours === 23 && minutes >= 50) {
-        afterWeekday = weekday === 7 ? 1 : weekday + 1;
+      let afterDayIndex = dayIndex;
+      
+      // Adjust if time goes past 59 minutes
+      if (afterMinute >= 60) {
+        afterMinute -= 60;
+        afterHour += 1;
+        
+        if (afterHour >= 24) {
+          afterHour -= 24;
+          afterWeekday = weekday === 7 ? 1 : weekday + 1;
+          afterDayIndex = dayIndex === 6 ? 0 : dayIndex + 1;
+        }
       }
 
-      const afterId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "❗ Udah minum obat belum?",
-          body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
-          data: { medicationId: medication.id, type: "after" },
-          sound: true,
-          // @ts-ignore
-          channelId: "medication-reminders",
-        },
-        trigger: {
-          weekday: afterWeekday,
-          hour: afterDate.getHours(),
-          minute: afterDate.getMinutes(),
-          repeats: true,
-        } as any,
-      });
-      notificationIds.push(afterId);
+      // Check if this would trigger immediately
+      const isAfterToday = afterDayIndex === currentDay;
+      const isAfterPastTime = isAfterToday && (afterHour < currentHour || (afterHour === currentHour && afterMinute <= currentMinute + 1));
+      
+      if (!isAfterPastTime) {
+        const afterId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "❗ Udah minum obat belum?",
+            body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+            data: { medicationId: medication.id, type: "after" },
+            sound: true,
+            // @ts-ignore
+            channelId: "medication-reminders",
+          },
+          trigger: {
+            weekday: afterWeekday,
+            hour: afterHour,
+            minute: afterMinute,
+            repeats: true,
+          } as any,
+        });
+        notificationIds.push(afterId);
+      }
     }
   } else {
     // Legacy/One-time logic
@@ -323,7 +380,7 @@ export async function scheduleReminderNotification(
   // Store the notification IDs in memory and persist to storage
   scheduledNotifications.set(medication.id, notificationIds);
   await saveScheduledNotifications(scheduledNotifications);
-  console.log(`Saved ${notificationIds.length} notification IDs to storage for ${medication.id}`);
+  console.log(`✅ Scheduled ${notificationIds.length} notifications for ${medication.title}`);
 
   return {
     beforeNotificationId: notificationIds[0],
