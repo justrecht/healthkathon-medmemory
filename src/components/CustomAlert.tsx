@@ -1,6 +1,7 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useLanguage } from "../i18n";
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
 
@@ -24,15 +25,18 @@ export function CustomAlert({
   visible,
   title,
   message,
-  buttons = [{ text: "OK" }],
+  buttons,
   onClose,
   icon,
   iconColor,
 }: CustomAlertProps) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
+
+  const effectiveButtons = buttons || [{ text: t("ok") }];
 
   // Ensure default button style has filled background
-  const resolvedButtons: AlertButton[] = buttons.map((b) => ({
+  const resolvedButtons: AlertButton[] = effectiveButtons.map((b) => ({
     style: b.style ?? "default",
     ...b,
   }));

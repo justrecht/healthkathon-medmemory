@@ -10,6 +10,7 @@ import {
     writeBatch
 } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { t_static } from "../i18n";
 
 export interface ConnectionRequest {
   id: string;
@@ -42,14 +43,14 @@ export const sendConnectionRequest = async (
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
-      throw new Error("User not found");
+      throw new Error(t_static("caregiverUserNotFound"));
     }
 
     const patientDoc = querySnapshot.docs[0];
     const patientData = patientDoc.data();
 
     if (patientData.role !== 'patient') {
-      throw new Error("User is not a patient");
+      throw new Error(t_static("caregiverNotPatient"));
     }
 
     // 2. Check if request already exists
@@ -63,12 +64,12 @@ export const sendConnectionRequest = async (
     const existingDocs = await getDocs(existingRequestQuery);
 
     if (!existingDocs.empty) {
-      throw new Error("Request already pending");
+      throw new Error(t_static("caregiverRequestPending"));
     }
     
     // Check if already connected
     if (patientData.caregivers && patientData.caregivers.includes(caregiverId)) {
-        throw new Error("Already connected to this patient");
+        throw new Error(t_static("caregiverAlreadyConnected"));
     }
 
     // 3. Create request
@@ -115,7 +116,7 @@ export const respondToConnectionRequest = async (requestId: string, accept: bool
     const requestSnap = await getDoc(requestRef);
     
     if (!requestSnap.exists()) {
-      throw new Error("Request not found");
+      throw new Error(t_static("caregiverRequestNotFound"));
     }
 
     const requestData = requestSnap.data() as ConnectionRequest;

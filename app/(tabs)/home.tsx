@@ -17,40 +17,42 @@ import { MedicationHistoryModal } from "../../src/components/MedicationHistoryMo
 import RemindersModal from "../../src/components/RemindersModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-    ThemedText
+  ThemedText
 } from "../../src/components/ui";
+import { useLanguage } from "../../src/i18n";
 import {
-    getConnectedPatients,
-    getPendingRequests,
-    respondToConnectionRequest,
-    sendConnectionRequest,
-    type ConnectedUser,
-    type ConnectionRequest,
+  getConnectedPatients,
+  getPendingRequests,
+  respondToConnectionRequest,
+  sendConnectionRequest,
+  type ConnectedUser,
+  type ConnectionRequest,
 } from "../../src/services/caregiver";
 import {
-    addNotificationResponseListener,
-    cancelMedicationNotifications,
-    dedupeMedicationNotifications,
-    registerForPushNotifications,
-    scheduleReminderNotification,
-    sendCaregiverNotification,
+  addNotificationResponseListener,
+  cancelMedicationNotifications,
+  dedupeMedicationNotifications,
+  registerForPushNotifications,
+  scheduleReminderNotification,
+  sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
-    calculateAdherence,
-    clearMedicationHistory,
-    createReminder as createReminderInStore,
-    deleteReminder as deleteReminderInStore,
-    getDailyAdherence,
-    getMedicationHistory,
-    getReminders as getRemindersFromStore,
-    saveMedicationRecord,
-    updateReminder as updateReminderInStore,
-    type MedicationRecord
+  calculateAdherence,
+  clearMedicationHistory,
+  createReminder as createReminderInStore,
+  deleteReminder as deleteReminderInStore,
+  getDailyAdherence,
+  getMedicationHistory,
+  getReminders as getRemindersFromStore,
+  saveMedicationRecord,
+  updateReminder as updateReminderInStore,
+  type MedicationRecord
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
 export default function HomeScreen() {
   const { theme, mode } = useTheme();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const [userRole, setUserRole] = useState<'patient' | 'caregiver' | null>(null);
   const [reminders, setReminders] = useState<any[]>([]);
@@ -124,11 +126,11 @@ export default function HomeScreen() {
       if (type === "ontime" || type === "after") {
         // Navigate to confirmation or show alert
         showAlert(
-          "Konfirmasi Minum Obat",
-          "Udah minum obatnya belum?",
+          t("confirmMedication"),
+          t("haveYouTakenMeds"),
           [
-            { text: "Belum", style: "cancel" },
-            { text: "Udah", onPress: () => handleConfirmMedication(medicationId), style: "default" },
+            { text: t("notYet"), style: "cancel" },
+            { text: t("already"), onPress: () => handleConfirmMedication(medicationId), style: "default" },
           ],
           "pills",
           "#2874A6"
@@ -160,7 +162,7 @@ export default function HomeScreen() {
       visible: true,
       title,
       message,
-      buttons: buttons || [{ text: "OK" }],
+      buttons: buttons || [{ text: t("ok") }],
       icon,
       iconColor,
     });
@@ -195,24 +197,24 @@ export default function HomeScreen() {
       if (result.success) {
         setShowConnectModal(false);
         showAlert(
-          "Permintaan Terkirim",
-          "Menunggu konfirmasi dari pasien",
-          [{ text: "OK" }],
+          t("requestSent"),
+          t("waitingConfirmation"),
+          [{ text: t("ok") }],
           "check-circle",
           "#10D99D"
         );
       } else {
         showAlert(
-          "Gagal",
-          result.error || "Gagal mengirim permintaan",
-          [{ text: "OK" }],
+          t("failed"),
+          result.error || t("failedToSendRequest"),
+          [{ text: t("ok") }],
           "triangle-exclamation",
           "#FF8585"
         );
       }
     } catch (error) {
       console.error(error);
-      showAlert("Error", "Terjadi kesalahan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+      showAlert(t("error"), t("errorOccurred"), [{ text: t("ok") }], "triangle-exclamation", "#FF8585");
     } finally {
       setIsConnecting(false);
     }
@@ -224,14 +226,14 @@ export default function HomeScreen() {
       if (result.success) {
         setPendingRequests(prev => prev.filter(r => r.id !== requestId));
         showAlert(
-          accept ? "Terhubung" : "Ditolak",
-          accept ? "Anda sekarang terhubung dengan caregiver" : "Permintaan ditolak",
-          [{ text: "OK" }],
+          accept ? t("connected") : t("rejected"),
+          accept ? t("connectedWithCaregiver") : t("requestRejected"),
+          [{ text: t("ok") }],
           accept ? "check-circle" : "xmark-circle",
           accept ? "#10D99D" : "#FF8585"
         );
       } else {
-        showAlert("Error", "Gagal memproses permintaan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+        showAlert(t("error"), t("failedProcessRequest"), [{ text: t("ok") }], "triangle-exclamation", "#FF8585");
       }
     } catch (error) {
       console.error(error);
@@ -378,9 +380,9 @@ export default function HomeScreen() {
     if (!medicationData.title || !medicationData.dosage || !medicationData.time) {
       console.log("Validation failed - missing required fields");
       showAlert(
-        "Error", 
-        "Isi dulu semua field yang diperlukan ya",
-        [{ text: "OK" }],
+        t("error"), 
+        t("fillRequiredFields"),
+        [{ text: t("ok") }],
         "triangle-exclamation",
         "#FF8585"
       );
@@ -425,9 +427,9 @@ export default function HomeScreen() {
       // Show success alert after modal is closed
       setTimeout(() => {
         showAlert(
-          "Berhasil", 
-          "Pengingat obat udah berhasil ditambahkan!",
-          [{ text: "OK" }],
+          t("success"), 
+          t("medicationAdded"),
+          [{ text: t("ok") }],
           "check-circle",
           "#10D99D"
         );
@@ -435,9 +437,9 @@ export default function HomeScreen() {
     } catch (error) {
       console.error("Error adding medication:", error);
       showAlert(
-        "Error", 
-        "Gagal menambahkan pengingat. Coba lagi ya!",
-        [{ text: "OK" }],
+        t("error"), 
+        t("failedToAdd"),
+        [{ text: t("ok") }],
         "triangle-exclamation",
         "#FF8585"
       );
@@ -464,16 +466,16 @@ export default function HomeScreen() {
     setShowEditModal(false);
 
     showAlert(
-      "Simpan Perubahan?",
-      "Yakin mau simpan perubahan jadwal obat ini?",
+      t("saveChanges"),
+      t("confirmSaveChanges"),
       [
         { 
-          text: "Batal", 
+          text: t("cancel"), 
           style: "cancel",
           onPress: () => setShowEditModal(true) // Re-open modal if cancelled
         },
         { 
-          text: "Simpan", 
+          text: t("save"), 
           onPress: async () => {
             try {
               // Persist to Firestore
@@ -494,15 +496,15 @@ export default function HomeScreen() {
               await scheduleReminderNotification(updated, true);
 
               showAlert(
-                "Berhasil",
-                "Perubahan pengingat sudah disimpan",
-                [{ text: "OK" }],
+                t("success"),
+                t("changesSaved"),
+                [{ text: t("ok") }],
                 "check-circle",
                 "#10D99D"
               );
             } catch (e) {
               console.error("Failed to update reminder", e);
-              showAlert("Error", "Gagal menyimpan perubahan", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+              showAlert(t("error"), t("failedToSave"), [{ text: t("ok") }], "triangle-exclamation", "#FF8585");
             }
           }
         }
@@ -521,9 +523,9 @@ export default function HomeScreen() {
     } catch (error) {
       console.error("Error viewing history:", error);
       showAlert(
-        "Error", 
-        "Gagal memuat riwayat konsumsi nih",
-        [{ text: "OK" }],
+        t("error"), 
+        t("failedToLoadHistory"),
+        [{ text: t("ok") }],
         "triangle-exclamation",
         "#FF8585"
       );
@@ -581,9 +583,9 @@ export default function HomeScreen() {
     } catch (error) {
       console.error("Error confirming medication:", error);
       showAlert(
-        "Error", 
-        "Gagal konfirmasi konsumsi obat nih",
-        [{ text: "OK" }],
+        t("error"), 
+        t("failedToConfirm"),
+        [{ text: t("ok") }],
         "triangle-exclamation",
         "#FF8585"
       );
@@ -601,26 +603,26 @@ export default function HomeScreen() {
         setActiveRemindersCount((c) => Math.max(0, c - 1));
       }
       showAlert(
-        "Berhasil",
-        "Pengingat sudah dihapus",
-        [{ text: "OK" }],
+        t("success"),
+        t("reminderDeleted"),
+        [{ text: t("ok") }],
         "check-circle",
         "#10D99D"
       );
     } catch (e) {
       console.error("Failed to delete reminder", e);
-      showAlert("Error", "Gagal menghapus pengingat", [{ text: "OK" }], "triangle-exclamation", "#FF8585");
+      showAlert(t("error"), t("failedToDelete"), [{ text: t("ok") }], "triangle-exclamation", "#FF8585");
     }
   }
 
   function confirmDelete(item: any) {
     showAlert(
-      "Hapus Pengingat",
-      `Yakin mau hapus jadwal ${item.title}?`,
+      t("deleteReminder"),
+      t("confirmDeleteReminder", { title: item.title }),
       [
-        { text: "Batal", style: "cancel" },
+        { text: t("cancel"), style: "cancel" },
         { 
-            text: "Hapus", 
+            text: t("delete"), 
             style: "destructive",
             onPress: () => deleteReminderDirectly(item.id)
         }
@@ -647,12 +649,12 @@ export default function HomeScreen() {
 
     if (diffMins > 15) {
       showAlert(
-        "Terlalu Cepat?",
-        `Jadwal obat ini jam ${nextReminder.time}. Yakin udah diminum sekarang?`,
+        t("tooEarly"),
+        t("confirmTooEarly", { time: nextReminder.time }),
         [
-          { text: "Batal", style: "cancel" },
+          { text: t("cancel"), style: "cancel" },
           { 
-            text: "Ya, Sudah", 
+            text: t("yesAlready"), 
             onPress: () => setShowConfirmModal(true),
             style: "default" 
           }
@@ -741,9 +743,9 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <View>
               <Text style={[styles.headerDate, { color: theme.colors.textSecondary }]}>
-                {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}
+                {new Date().toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
               </Text>
-              <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>Ringkasan</Text>
+              <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>{t("summary")}</Text>
             </View>
             <Pressable style={[styles.profileButton, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#E5E5EA" }]}>
               <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={20} />
@@ -753,8 +755,8 @@ export default function HomeScreen() {
           <View style={[styles.summaryCard, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF" }]}>
              <View style={styles.summaryHeader}>
                 <View>
-                  <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>Mode Caregiver</Text>
-                  <Text style={[styles.summarySubtitle, { color: theme.colors.textSecondary }]}>Memantau {connectedPatients.length} Pasien</Text>
+                  <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>{t("caregiverMode")}</Text>
+                  <Text style={[styles.summarySubtitle, { color: theme.colors.textSecondary }]}>{t("monitoringPatients", { count: connectedPatients.length })}</Text>
                 </View>
                 <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={24} />
              </View>
@@ -762,9 +764,9 @@ export default function HomeScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Pasien Terhubung</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("connectedPatients")}</Text>
               <Pressable onPress={() => setShowConnectModal(true)}>
-                 <Text style={{ color: theme.colors.accent, fontSize: 17, fontWeight: "600" }}>Tambah</Text>
+                 <Text style={{ color: theme.colors.accent, fontSize: 17, fontWeight: "600" }}>{t("add")}</Text>
               </Pressable>
             </View>
             <View style={{ gap: 12, paddingHorizontal: 20 }}>
@@ -793,14 +795,14 @@ export default function HomeScreen() {
               )) : (
                 <View style={[styles.emptyState, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF", borderRadius: 12, padding: 24 }]}>
                   <FontAwesome6 name="users" color={theme.colors.muted} size={48} />
-                  <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pasien terhubung</ThemedText>
-                  <ThemedText variant="caption" color="muted">Hubungkan pasien untuk memantau pengobatan mereka</ThemedText>
+                  <ThemedText color="muted" style={styles.emptyStateTitle}>{t("noConnectedPatients")}</ThemedText>
+                  <ThemedText variant="caption" color="muted">{t("connectPatientsDesc")}</ThemedText>
                   
                   <Pressable
                     style={[styles.primaryButton, { backgroundColor: theme.colors.accent, marginTop: 16, width: '100%' }]}
                     onPress={() => setShowConnectModal(true)}
                   >
-                    <Text style={styles.primaryButtonText}>Hubungkan Pasien</Text>
+                    <Text style={styles.primaryButtonText}>{t("connectPatient")}</Text>
                   </Pressable>
                 </View>
               )}
@@ -838,9 +840,9 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={[styles.headerDate, { color: theme.colors.textSecondary }]}>
-              {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}
+              {new Date().toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
             </Text>
-            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>Ringkasan</Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>{t("summary")}</Text>
           </View>
           <Pressable style={[styles.profileButton, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#E5E5EA" }]}>
             <FontAwesome6 name="user" color={theme.colors.accent} size={20} />
@@ -855,8 +857,8 @@ export default function HomeScreen() {
         >
           <View style={styles.summaryHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>Kepatuhan Hari Ini</Text>
-              <Text style={[styles.summarySubtitle, { color: theme.colors.textSecondary }]}>Tetap konsisten ya!</Text>
+              <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>{t("todayAdherence")}</Text>
+              <Text style={[styles.summarySubtitle, { color: theme.colors.textSecondary }]}>{t("keepConsistent")}</Text>
             </View>
             <LinearGradient
               colors={theme.colors.gradient}
@@ -886,9 +888,12 @@ export default function HomeScreen() {
                 }]}>{adherencePercentage}%</Text>
               </LinearGradient>
               <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 12 }}>
-                <Text style={[styles.percentageLabel, { color: theme.colors.textSecondary, fontSize: 16 }]}>tercapai</Text>
+                <Text style={[styles.percentageLabel, { color: theme.colors.textSecondary, fontSize: 16 }]}>{t("achieved")}</Text>
                 <Text style={[styles.percentageSubtext, { color: theme.colors.textSecondary }]}>
-                  {reminders.filter(r => r.status === 'taken' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay()))).length} dari {reminders.filter(r => !r.repeatDays || r.repeatDays.includes(new Date().getDay())).length} dosis
+                  {t("doses", { 
+                    taken: reminders.filter(r => r.status === 'taken' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay()))).length,
+                    total: reminders.filter(r => !r.repeatDays || r.repeatDays.includes(new Date().getDay())).length
+                  })}
                 </Text>
               </View>
             </View>
@@ -929,7 +934,7 @@ export default function HomeScreen() {
                   <FontAwesome6 name="calendar-check" color={theme.colors.accent} size={18} />
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{reminders.filter(r => !r.repeatDays || r.repeatDays.includes(new Date().getDay())).length}</Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Jadwal Hari Ini</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t("todaySchedule")}</Text>
              </View>
              <View style={[styles.statItem, { borderLeftWidth: 1, borderLeftColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', paddingLeft: 20 }]}>
                 <LinearGradient
@@ -941,7 +946,7 @@ export default function HomeScreen() {
                   <FontAwesome6 name="check-circle" color="#34C759" size={18} />
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{reminders.filter(r => r.status === 'taken' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay()))).length}</Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Diminum Hari Ini</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t("takenToday")}</Text>
              </View>
           </View>
         </LinearGradient>
@@ -949,7 +954,7 @@ export default function HomeScreen() {
         {pendingRequests.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Permintaan Koneksi</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("connectionRequests")}</Text>
             </View>
             <View style={{ gap: 12, paddingHorizontal: 20 }}>
               {pendingRequests.map((request) => (
@@ -981,13 +986,13 @@ export default function HomeScreen() {
                       style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }}
                       onPress={() => handleRespondRequest(request.id, false)}
                     >
-                      <ThemedText variant="caption" weight="600" style={{ color: "#FF3B30", fontSize: 15 }}>Tolak</ThemedText>
+                      <ThemedText variant="caption" weight="600" style={{ color: "#FF3B30", fontSize: 15 }}>{t("reject")}</ThemedText>
                     </Pressable>
                     <Pressable 
                       style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: theme.colors.accent }}
                       onPress={() => handleRespondRequest(request.id, true)}
                     >
-                      <ThemedText variant="caption" weight="600" style={{ color: 'white', fontSize: 15 }}>Terima</ThemedText>
+                      <ThemedText variant="caption" weight="600" style={{ color: 'white', fontSize: 15 }}>{t("accept")}</ThemedText>
                     </Pressable>
                   </View>
                 </View>
@@ -998,7 +1003,7 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Dosis Berikutnya</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("nextDose")}</Text>
             <Pressable onPress={() => setShowAddModal(true)}>
                <FontAwesome6 name="plus" color={theme.colors.accent} size={20} />
             </Pressable>
@@ -1034,7 +1039,7 @@ export default function HomeScreen() {
                       {nextReminder.time}
                     </ThemedText>
                     <ThemedText variant="caption" color="muted">
-                      hari ini
+                      {t("today")}
                     </ThemedText>
                   </View>
                 </View>
@@ -1048,7 +1053,7 @@ export default function HomeScreen() {
                     style={{ paddingVertical: 12, alignItems: 'center', width: '100%' }}
                     onPress={handlePressConfirmButton}
                   >
-                    <Text style={styles.primaryButtonText}>Udah minum obat</Text>
+                    <Text style={styles.primaryButtonText}>{t("alreadyTakenMeds")}</Text>
                   </Pressable>
                 </LinearGradient>
               </LinearGradient>
@@ -1061,8 +1066,8 @@ export default function HomeScreen() {
               >
                 <View style={styles.emptyState}>
                   <FontAwesome6 name="calendar-plus" color={theme.colors.muted} size={48} />
-                  <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat</ThemedText>
-                  <ThemedText variant="caption" color="muted">Yuk, tambahin pengingat kamu untuk hari ini!</ThemedText>
+                  <ThemedText color="muted" style={styles.emptyStateTitle}>{t("noReminders")}</ThemedText>
+                  <ThemedText variant="caption" color="muted">{t("addReminderDesc")}</ThemedText>
                 </View>
               </LinearGradient>
             )}
@@ -1071,8 +1076,8 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Timeline</Text>
-             <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>7 Hari Terakhir</Text>
+             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("timeline")}</Text>
+             <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>{t("last7Days")}</Text>
           </View>
           <LinearGradient
             colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
@@ -1158,8 +1163,8 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.emptyState}>
                 <FontAwesome6 name="chart-line" color={theme.colors.muted} size={48} />
-                <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada data</ThemedText>
-                <ThemedText variant="caption" color="muted">Mulai minum obat buat lihat timeline</ThemedText>
+                <ThemedText color="muted" style={styles.emptyStateTitle}>{t("noData")}</ThemedText>
+                <ThemedText variant="caption" color="muted">{t("startTakingMeds")}</ThemedText>
               </View>
             )}
           </LinearGradient>
@@ -1167,10 +1172,10 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Jadwal Obat</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("medicationSchedule")}</Text>
             {reminders.length > 3 && (
                <Pressable onPress={() => setShowAllReminders(true)}>
-                  <Text style={{ color: theme.colors.accent, fontSize: 17 }}>Lihat Semua</Text>
+                  <Text style={{ color: theme.colors.accent, fontSize: 17 }}>{t("seeAll")}</Text>
                </Pressable>
             )}
           </View>
@@ -1267,8 +1272,8 @@ export default function HomeScreen() {
               return (
                 <View style={styles.emptyState}>
                   <FontAwesome6 name="clock" color={theme.colors.muted} size={48} />
-                  <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada jadwal</ThemedText>
-                  <ThemedText variant="caption" color="muted">Tambahin pengingat obat buat lihat jadwal</ThemedText>
+                  <ThemedText color="muted" style={styles.emptyStateTitle}>{t("noSchedule")}</ThemedText>
+                  <ThemedText variant="caption" color="muted">{t("addReminderToSee")}</ThemedText>
                 </View>
               );
             })()}
@@ -1277,7 +1282,7 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Caregiver</Text>
+             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{t("caregiver")}</Text>
           </View>
           <LinearGradient
             colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
@@ -1302,11 +1307,11 @@ export default function HomeScreen() {
                     </LinearGradient>
                     <View style={{ flex: 1 }}>
                       <ThemedText weight="600" style={{ fontSize: 17 }}>{caregiver.name || caregiver.caregiverName || 'Caregiver'}</ThemedText>
-                      <ThemedText variant="caption" color="muted">{caregiver.email || caregiver.caregiverEmail || 'Terhubung'}</ThemedText>
+                      <ThemedText variant="caption" color="muted">{caregiver.email || caregiver.caregiverEmail || t("connected")}</ThemedText>
                     </View>
                     <View style={{ backgroundColor: 'rgba(52,199,89,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#34C759' }} />
-                      <ThemedText variant="caption" weight="600" style={{ color: '#34C759', fontSize: 12 }}>Aktif</ThemedText>
+                      <ThemedText variant="caption" weight="600" style={{ color: '#34C759', fontSize: 12 }}>{t("active")}</ThemedText>
                     </View>
                   </View>
                 ));
@@ -1314,7 +1319,7 @@ export default function HomeScreen() {
               
               return (
                 <View style={{ paddingVertical: 16 }}>
-                  <ThemedText color="muted" style={{ textAlign: 'center' }}>Belum ada caregiver terhubung</ThemedText>
+                  <ThemedText color="muted" style={{ textAlign: 'center' }}>{t("noCaregiverConnected")}</ThemedText>
                 </View>
               );
             })()}
@@ -1322,7 +1327,7 @@ export default function HomeScreen() {
               <Pressable onPress={handleViewHistory} style={{ flex: 1 }}>
                 <View style={[styles.caregiverAction, { backgroundColor: 'transparent' }]}>
                   <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
-                  <ThemedText variant="caption" weight="600" style={{ color: theme.colors.accent, fontSize: 15 }}>Riwayat konsumsi</ThemedText>
+                  <ThemedText variant="caption" weight="600" style={{ color: theme.colors.accent, fontSize: 15 }}>{t("consumptionHistory")}</ThemedText>
                 </View>
               </Pressable>
             </View>
@@ -1361,12 +1366,12 @@ export default function HomeScreen() {
         medicationHistory={medicationHistory}
         onClearAll={() => {
           showAlert(
-            "Hapus Semua Riwayat",
-            "Yakin mau hapus semua riwayat konsumsi obat? Tindakan ini tidak bisa dibatalkan.",
+            t("deleteAllHistory"),
+            t("confirmDeleteAllHistory"),
             [
-              { text: "Batal", style: "cancel" },
+              { text: t("cancel"), style: "cancel" },
               {
-                text: "Hapus Semua",
+                text: t("deleteAll"),
                 style: "destructive",
                 onPress: async () => {
                   const success = await clearMedicationHistory();
@@ -1374,17 +1379,17 @@ export default function HomeScreen() {
                     setMedicationHistory([]);
                     setShowHistoryModal(false);
                     showAlert(
-                      "Berhasil",
-                      "Semua riwayat sudah dihapus",
-                      [{ text: "OK" }],
+                      t("success"),
+                      t("allHistoryDeleted"),
+                      [{ text: t("ok") }],
                       "check-circle",
                       "#10D99D"
                     );
                   } else {
                     showAlert(
-                      "Error",
-                      "Gagal menghapus riwayat",
-                      [{ text: "OK" }],
+                      t("error"),
+                      t("failedToDeleteHistory"),
+                      [{ text: t("ok") }],
                       "triangle-exclamation",
                       "#FF8585"
                     );

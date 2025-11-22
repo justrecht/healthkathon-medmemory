@@ -2,6 +2,7 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useLanguage } from "../i18n";
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
 
@@ -25,12 +26,13 @@ interface RemindersModalProps {
 
 export function RemindersModal({ visible, onClose, reminders, onSelect, onDelete }: RemindersModalProps) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   const getDayLabels = (repeatDays?: number[]) => {
-    if (!repeatDays || repeatDays.length === 0) return "Tidak ada hari";
-    if (repeatDays.length === 7) return "Setiap hari";
+    if (!repeatDays || repeatDays.length === 0) return t("noDays");
+    if (repeatDays.length === 7) return t("everyDay");
     
-    const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+    const dayNames = t("shortDays").split(",");
     return repeatDays.map(d => dayNames[d]).join(", ");
   };
 
@@ -45,10 +47,10 @@ export function RemindersModal({ visible, onClose, reminders, onSelect, onDelete
         <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
           <View style={styles.headerContent}>
             <ThemedText variant="title" weight="700">
-              Semua Pengingat
+              {t("allReminders")}
             </ThemedText>
             <ThemedText variant="caption" color="secondary">
-              {reminders.length} pengingat
+              {t("remindersCount", { count: reminders.length })}
             </ThemedText>
           </View>
           <Pressable onPress={onClose} style={styles.closeButton}>
@@ -74,7 +76,7 @@ export function RemindersModal({ visible, onClose, reminders, onSelect, onDelete
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
                   <ThemedText>{item.time}</ThemedText>
-                  <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
+                  <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{t(item.status)}</Text>
                 </View>
                 {onDelete && (
                   <Pressable

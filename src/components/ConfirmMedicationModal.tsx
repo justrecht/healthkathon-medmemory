@@ -1,6 +1,7 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useLanguage } from "../i18n";
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
 
@@ -20,6 +21,7 @@ export function ConfirmMedicationModal({
   loading = false,
 }: ConfirmMedicationModalProps) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   return (
     <Modal
@@ -37,10 +39,10 @@ export function ConfirmMedicationModal({
             <FontAwesome6 name="circle-check" color={theme.colors.success} size={64} />
           </View>
           <ThemedText variant="heading" weight="700" style={styles.title}>
-            Konfirmasi Minum Obat
+            {t("confirmMedication")}
           </ThemedText>
           <ThemedText color="secondary" style={styles.subtitle}>
-            Apakah Anda sudah minum obat {medicationName}?
+            {t("haveYouTakenMedicationName", { medicationName: medicationName || "" })}
           </ThemedText>
           <View style={styles.buttonContainer}>
             <Pressable
@@ -48,7 +50,7 @@ export function ConfirmMedicationModal({
               onPress={onClose}
               disabled={loading}
             >
-              <ThemedText weight="600" style={{ opacity: loading ? 0.5 : 1 }}>Belum</ThemedText>
+              <ThemedText weight="600" style={{ opacity: loading ? 0.5 : 1 }}>{t("notYet")}</ThemedText>
             </Pressable>
             <Pressable
               style={[styles.button, { backgroundColor: theme.colors.success }]}
@@ -58,7 +60,7 @@ export function ConfirmMedicationModal({
               {loading ? (
                 <ActivityIndicator color="white" size="small" />
               ) : (
-                <Text style={styles.confirmButtonText}>Sudah</Text>
+                <Text style={styles.confirmButtonText}>{t("already")}</Text>
               )}
             </Pressable>
           </View>

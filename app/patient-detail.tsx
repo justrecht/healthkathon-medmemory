@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GradientChip, SectionHeader, Surface, ThemedText } from "../src/components/ui";
 import { db } from "../src/config/firebase";
+import { useLanguage } from "../src/i18n";
 import {
   calculateAdherence,
   getMedicationHistory,
@@ -18,6 +19,7 @@ import { useTheme } from "../src/theme";
 
 export default function PatientDetailScreen() {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const { patientId } = useLocalSearchParams<{ patientId: string }>();
   const [loading, setLoading] = useState(true);
@@ -81,7 +83,7 @@ export default function PatientDetailScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginRight: 16 }}>
           <FontAwesome6 name="arrow-left" color={theme.colors.textPrimary} size={18} />
         </Pressable>
-        <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>Detail Pasien</ThemedText>
+        <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>{t("patientDetail")}</ThemedText>
       </View>
       
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
@@ -92,39 +94,39 @@ export default function PatientDetailScreen() {
               <FontAwesome6 name="user" color={theme.colors.accent} size={24} />
             </View>
             <View style={{ flex: 1 }}>
-              <ThemedText variant="subheading" weight="600">{patient?.name || "Pasien"}</ThemedText>
+              <ThemedText variant="subheading" weight="600">{patient?.name || t("patient")}</ThemedText>
               <ThemedText variant="caption" color="muted">{patient?.email}</ThemedText>
             </View>
-            <GradientChip label={`Konsistensi ${adherence}%`} />
+            <GradientChip label={`${t("consistency")} ${adherence}%`} />
           </View>
         </Surface>
 
         {/* Stats Overview */}
         <Surface>
-          <SectionHeader title="Ringkasan Mingguan" subtitle="7 hari terakhir" />
+          <SectionHeader title={t("weeklySummary")} subtitle={t("last7Days")} />
           <View style={styles.statsGrid}>
             <View style={[styles.statCard, { backgroundColor: theme.colors.cardMuted }]}>
               <FontAwesome6 name="pills" color={theme.colors.accent} size={20} />
               <ThemedText variant="heading" weight="700" style={{ marginTop: 8 }}>{history.filter(h => h.status === 'taken').length}</ThemedText>
-              <ThemedText variant="caption" color="muted">Obat Diminum</ThemedText>
+              <ThemedText variant="caption" color="muted">{t("medsTaken")}</ThemedText>
             </View>
             <View style={[styles.statCard, { backgroundColor: theme.colors.cardMuted }]}>
               <FontAwesome6 name="triangle-exclamation" color={theme.colors.danger} size={20} />
               <ThemedText variant="heading" weight="700" style={{ marginTop: 8 }}>{history.filter(h => h.status === 'missed').length}</ThemedText>
-              <ThemedText variant="caption" color="muted">Terlewat</ThemedText>
+              <ThemedText variant="caption" color="muted">{t("missed")}</ThemedText>
             </View>
           </View>
         </Surface>
 
         {/* Active Reminders */}
         <Surface>
-          <SectionHeader title="Jadwal Obat" subtitle="Pengingat aktif pasien" />
+          <SectionHeader title={t("medicationSchedule")} subtitle={t("activeReminders")} />
           {reminders.length > 0 ? (
             <View style={{ gap: 12 }}>
               {reminders.map((reminder) => {
                 const getDayLabels = (repeatDays?: number[]) => {
-                  if (!repeatDays || repeatDays.length === 0) return "Tidak ada hari";
-                  if (repeatDays.length === 7) return "Setiap hari";
+                  if (!repeatDays || repeatDays.length === 0) return t("noDays");
+                  if (repeatDays.length === 7) return t("everyDay");
                   const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
                   return repeatDays.map(d => dayNames[d]).join(", ");
                 };
@@ -145,13 +147,13 @@ export default function PatientDetailScreen() {
               })}
             </View>
           ) : (
-            <ThemedText color="muted" style={{ textAlign: 'center', padding: 16 }}>Belum ada jadwal obat</ThemedText>
+            <ThemedText color="muted" style={{ textAlign: 'center', padding: 16 }}>{t("noSchedule")}</ThemedText>
           )}
         </Surface>
 
         {/* Recent History */}
         <Surface>
-          <SectionHeader title="Riwayat Terakhir" subtitle="Aktivitas konsumsi obat" />
+          <SectionHeader title={t("recentHistory")} subtitle={t("consumptionActivity")} />
           {history.length > 0 ? (
             <View style={{ gap: 12 }}>
               {history.slice(0, 5).map((record) => (
@@ -171,14 +173,14 @@ export default function PatientDetailScreen() {
                       weight="600" 
                       style={{ color: record.status === 'taken' ? '#10D99D' : '#FF8585' }}
                     >
-                      {record.status === 'taken' ? 'Diminum' : 'Terlewat'}
+                      {record.status === 'taken' ? t("taken") : t("missed")}
                     </ThemedText>
                   </View>
                 </View>
               ))}
             </View>
           ) : (
-            <ThemedText color="muted" style={{ textAlign: 'center', padding: 16 }}>Belum ada riwayat</ThemedText>
+            <ThemedText color="muted" style={{ textAlign: 'center', padding: 16 }}>{t("noHistory")}</ThemedText>
           )}
         </Surface>
       </ScrollView>

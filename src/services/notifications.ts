@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { t_static } from "../i18n";
 import { clearScheduledNotifications, getScheduledNotifications, getUISettings, saveScheduledNotifications } from "./storage";
 
 // Configure notification behavior
@@ -237,8 +238,8 @@ export async function scheduleReminderNotification(
       // Setelah menembak, listener akan mengubahnya jadi weekly repeat.
       const onTimeId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⏰ Waktunya Minum Obat!',
-          body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ''}`,
+          title: t_static("notifTimeTitle"),
+          body: t_static("notifTimeBody", { title: medication.title, dosage: medication.dosage }) + (medication.notes ? `\n${medication.notes}` : ''),
           data: { medicationId: medication.id, type: 'ontime', oneTime: true },
           sound: true,
           // @ts-ignore
@@ -253,8 +254,8 @@ export async function scheduleReminderNotification(
       const afterDate = new Date(targetDate.getTime() + 10 * 60 * 1000);
       const afterId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '❗ Udah minum obat belum?',
-          body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+          title: t_static("notifAfterTitle"),
+          body: t_static("notifAfterBody", { title: medication.title }),
           data: { medicationId: medication.id, type: 'after', oneTime: true },
           sound: true,
           // @ts-ignore
@@ -286,8 +287,8 @@ export async function scheduleReminderNotification(
     if (enableBeforeNotification && beforeTime.getTime() > now.getTime() + 120000) {
       const beforeNotificationId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: "🔔 Pengingat Obat",
-          body: `${medication.title} (${medication.dosage}) dalam 30 menit`,
+          title: t_static("notifBeforeTitle"),
+          body: t_static("notifBeforeBody", { title: medication.title, dosage: medication.dosage }),
           data: { medicationId: medication.id, type: "before" },
           sound: true,
         },
@@ -302,8 +303,8 @@ export async function scheduleReminderNotification(
     // Schedule notification at exact time
     const onTimeNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "⏰ Waktunya Minum Obat!",
-        body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ""}`,
+        title: t_static("notifTimeTitle"),
+        body: t_static("notifTimeBody", { title: medication.title, dosage: medication.dosage }) + (medication.notes ? `\n${medication.notes}` : ""),
         data: { medicationId: medication.id, type: "ontime" },
         sound: true,
       },
@@ -318,8 +319,8 @@ export async function scheduleReminderNotification(
     const afterTime = new Date(scheduledTime.getTime() + 10 * 60 * 1000);
     const afterNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "❗ Udah minum obat belum?",
-        body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+        title: t_static("notifAfterTitle"),
+        body: t_static("notifAfterBody", { title: medication.title }),
         data: { medicationId: medication.id, type: "after" },
         sound: true,
       },
@@ -389,7 +390,7 @@ export async function sendCaregiverNotification(
       patientName,
       medicationName,
       scheduledTime,
-      message: `${patientName} melewatkan jadwal minum obat ${medicationName} pada ${scheduledTime}`,
+      message: t_static("caregiverMissedMessage", { patientName, medicationName, scheduledTime }),
       read: false,
       createdAt: new Date().toISOString(),
     };
@@ -400,8 +401,8 @@ export async function sendCaregiverNotification(
     // Also send a local notification (for demo purposes or if caregiver is using the same device)
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "🚨 Pasien Melewatkan Obat",
-        body: `${patientName} belum minum ${medicationName} yang dijadwalkan jam ${scheduledTime}`,
+        title: t_static("caregiverAlertTitle"),
+        body: t_static("caregiverAlertBody", { patientName, medicationName, scheduledTime }),
         data: { 
           type: "caregiver-alert",
           patientId,
@@ -445,8 +446,8 @@ export async function scheduleCaregiversMissedNotification(
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "⚠️ Cek Status Pasien",
-      body: `Waktu untuk cek apakah pasien ${patientName} sudah minum ${medication.title}`,
+      title: t_static("caregiverCheckTitle"),
+      body: t_static("caregiverCheckBody", { patientName, medicationName: medication.title }),
       data: {
         type: "caregiver-check",
         medicationId: medication.id,
@@ -466,8 +467,8 @@ export async function sendTestNotification() {
   // Send a test notification immediately
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "✅ Notifikasi Berfungsi!",
-      body: "Ini adalah notifikasi test. Sistem notifikasi udah jalan dengan baik!",
+      title: t_static("testNotifTitle"),
+      body: t_static("testNotifBody"),
       data: { type: "test" },
       sound: true,
     },
@@ -519,8 +520,8 @@ export function addNotificationReceivedListener() {
       if (type === 'ontime') {
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: '⏰ Waktunya Minum Obat!',
-            body: `${medication.title} - ${medication.dosage}${medication.notes ? `\n${medication.notes}` : ''}`,
+            title: t_static("notifTimeTitle"),
+            body: t_static("notifTimeBody", { title: medication.title, dosage: medication.dosage }) + (medication.notes ? `\n${medication.notes}` : ''),
             data: { medicationId: medId, type: 'ontime' },
             sound: true,
             // @ts-ignore
@@ -536,8 +537,8 @@ export function addNotificationReceivedListener() {
         if (afterHour >= 24) { afterHour -= 24; }
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: '❗ Udah minum obat belum?',
-            body: `Jangan lupa konfirmasi konsumsi ${medication.title} ya!`,
+            title: t_static("notifAfterTitle"),
+            body: t_static("notifAfterBody", { title: medication.title }),
             data: { medicationId: medId, type: 'after' },
             sound: true,
             // @ts-ignore

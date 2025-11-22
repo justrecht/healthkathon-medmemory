@@ -2,6 +2,7 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useLanguage } from "../i18n";
 import { type MedicationRecord } from "../services/storage";
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
@@ -20,6 +21,7 @@ export function MedicationHistoryModal({
   onClearAll,
 }: MedicationHistoryModalProps) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -55,11 +57,11 @@ export function MedicationHistoryModal({
   const getStatusText = (status: string) => {
     switch (status) {
       case "taken":
-        return "Diminum";
+        return t("taken");
       case "missed":
-        return "Terlewat";
+        return t("missed");
       case "late":
-        return "Terlambat";
+        return t("late");
       default:
         return status;
     }
@@ -74,24 +76,17 @@ export function MedicationHistoryModal({
     >
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-          <View style={styles.headerContent}>
-            <ThemedText variant="title" weight="700">
-              Riwayat Konsumsi
-            </ThemedText>
-            <ThemedText variant="caption" color="secondary">
-              {medicationHistory.length} catatan
-            </ThemedText>
+          <View>
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
+              {t("consumptionHistory")}
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+              {t("recordsCount", { count: medicationHistory.length })}
+            </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {onClearAll && medicationHistory.length > 0 && (
-              <Pressable onPress={onClearAll} style={[styles.closeButton]}>
-                <FontAwesome6 name="trash" size={20} color="#FF6B6B" />
-              </Pressable>
-            )}
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <FontAwesome6 name="xmark" size={24} color={theme.colors.textPrimary} />
-            </Pressable>
-          </View>
+          <Pressable onPress={onClose} style={styles.closeButton}>
+            <FontAwesome6 name="xmark" size={24} color={theme.colors.textPrimary} />
+          </Pressable>
         </View>
 
         <ScrollView
@@ -154,13 +149,13 @@ export function MedicationHistoryModal({
                       <View style={styles.timeItem}>
                         <FontAwesome6 name="clock" size={14} color={theme.colors.muted} />
                         <ThemedText variant="caption" color="muted">
-                          Dijadwalkan: {record.scheduledTime}
+                          {t("scheduledAt", { time: formatTime(record.scheduledTime) })}
                         </ThemedText>
                       </View>
                       <View style={styles.timeItem}>
                         <FontAwesome6 name="check-circle" size={14} color={theme.colors.muted} />
                         <ThemedText variant="caption" color="muted">
-                          Diminum: {record.takenAt ? formatTime(record.takenAt) : 'N/A'}
+                          {t("takenAt", { time: record.takenAt ? formatTime(record.takenAt) : '-' })}
                         </ThemedText>
                       </View>
                     </View>
@@ -171,10 +166,10 @@ export function MedicationHistoryModal({
             <View style={styles.emptyState}>
               <FontAwesome6 name="hourglass" color={theme.colors.muted} size={64} />
               <ThemedText color="muted" style={styles.emptyStateTitle}>
-                Belum ada riwayat
+                {t("noHistoryTitle")}
               </ThemedText>
               <ThemedText variant="caption" color="muted" style={styles.emptyStateSubtitle}>
-                Riwayat konsumsi obat akan muncul di sini setelah Anda mulai mengonfirmasi minum obat
+                {t("noHistorySubtitle")}
               </ThemedText>
             </View>
           )}
@@ -196,8 +191,13 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
-  headerContent: {
-    flex: 1,
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#6B7280",
   },
   closeButton: {
     padding: 8,

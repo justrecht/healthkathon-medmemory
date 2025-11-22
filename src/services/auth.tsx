@@ -1,11 +1,12 @@
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+import { t_static } from "../i18n";
 
 export interface AuthError {
   code: string;
@@ -16,22 +17,22 @@ export interface AuthError {
 const getAuthErrorMessage = (error: any): string => {
   const errorCode = error?.code || "";
   const errorMessages: { [key: string]: string } = {
-    "auth/invalid-email": "Email tidak valid",
-    "auth/user-not-found": "Email tidak ditemukan. Silakan daftar terlebih dahulu",
-    "auth/wrong-password": "Password salah",
-    "auth/invalid-login-credentials": "Email atau password salah",
-    "auth/user-disabled": "Akun ini telah dinonaktifkan",
-    "auth/too-many-requests": "Terlalu banyak percobaan login. Silakan coba lagi nanti",
-    "auth/email-already-in-use": "Email sudah terdaftar",
-    "auth/weak-password": "Password terlalu lemah. Gunakan minimal 6 karakter",
-    "auth/operation-not-allowed": "Operasi ini tidak diizinkan",
-    "auth/network-request-failed": "Jaringan tidak stabil. Periksa koneksi internet Anda",
+    "auth/invalid-email": t_static("authInvalidEmail"),
+    "auth/user-not-found": t_static("authUserNotFound"),
+    "auth/wrong-password": t_static("authWrongPassword"),
+    "auth/invalid-login-credentials": t_static("authInvalidCredentials"),
+    "auth/user-disabled": t_static("authUserDisabled"),
+    "auth/too-many-requests": t_static("authTooManyRequests"),
+    "auth/email-already-in-use": t_static("authEmailInUse"),
+    "auth/weak-password": t_static("authWeakPassword"),
+    "auth/operation-not-allowed": t_static("authOperationNotAllowed"),
+    "auth/network-request-failed": t_static("authNetworkFailed"),
   };
   
   console.error("Auth Error Code:", errorCode);
   console.error("Full error:", error);
   
-  return errorMessages[errorCode] || error?.message || "Terjadi kesalahan. Silakan coba lagi";
+  return errorMessages[errorCode] || error?.message || t_static("authUnknownError");
 };
 
 export const signUpWithEmail = async (email: string, password: string, name: string, role: 'patient' | 'caregiver') => {

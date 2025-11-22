@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { LanguageProvider } from "../src/i18n";
 import { ThemeProvider } from "../src/theme";
 
 SplashScreen.preventAutoHideAsync();
@@ -27,16 +28,18 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="settings"
-            options={{ presentation: "card", headerShown: false }}
-          />
-        </Stack>
-      </GestureHandlerRootView>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="settings"
+              options={{ presentation: "card", headerShown: false }}
+            />
+          </Stack>
+        </GestureHandlerRootView>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

@@ -9,12 +9,14 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { Surface, ThemedText } from "../../src/components/ui";
 import { auth, db } from "../../src/config/firebase";
+import { useLanguage } from "../../src/i18n";
 import { getConnectedPatients, type ConnectedUser } from "../../src/services/caregiver";
 import { calculateAdherence, getReminders } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,7 @@ export default function ProfileScreen() {
         options={{
           headerShown: true,
           headerTransparent: false,
-          headerTitle: "Profil",
+          headerTitle: t("profile"),
           headerStyle: { backgroundColor: theme.colors.background },
           headerShadowVisible: false,
           headerTitleStyle: { 
@@ -113,13 +115,13 @@ export default function ProfileScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : !userProfile ? (
             <View style={{ padding: 16 }}>
-              <ThemedText variant="subheading" weight="600" style={{ color: "#FFFFFF" }}>Belum masuk</ThemedText>
-              <ThemedText variant="body" style={{ marginTop: 8, color: "rgba(255,255,255,0.8)" }}>Silakan masuk untuk melihat profil Anda.</ThemedText>
+              <ThemedText variant="subheading" weight="600" style={{ color: "#FFFFFF" }}>{t("notSignedIn")}</ThemedText>
+              <ThemedText variant="body" style={{ marginTop: 8, color: "rgba(255,255,255,0.8)" }}>{t("signInToViewProfile")}</ThemedText>
               <Pressable 
                 onPress={() => router.push("/login" as any)} 
                 style={{ marginTop: 16, backgroundColor: "rgba(255,255,255,0.2)", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, alignSelf: "flex-start" }}
               >
-                <ThemedText weight="600" style={{ color: "#FFFFFF" }}>Ke Halaman Login</ThemedText>
+                <ThemedText weight="600" style={{ color: "#FFFFFF" }}>{t("goToLogin")}</ThemedText>
               </Pressable>
             </View>
           ) : (
@@ -149,7 +151,7 @@ export default function ProfileScreen() {
                       size={12} 
                     />
                     <ThemedText weight="600" style={{ color: "#FFFFFF", fontSize: 14 }}>
-                      {userProfile.role === "caregiver" ? "Caregiver" : "Pasien"}
+                      {userProfile.role === "caregiver" ? t("caregiver") : t("patient")}
                     </ThemedText>
                   </View>
                 </View>
@@ -164,7 +166,7 @@ export default function ProfileScreen() {
               <View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
                   <FontAwesome6 name="hospital-user" size={20} color={theme.colors.accent} />
-                  <ThemedText variant="subheading" weight="600">Informasi Pasien</ThemedText>
+                  <ThemedText variant="subheading" weight="600">{t("patientInfo")}</ThemedText>
                 </View>
 
                 {connectedPatients.length > 0 ? (
@@ -192,7 +194,7 @@ export default function ProfileScreen() {
                           </View>
                           <View style={styles.activeIndicator}>
                             <View style={styles.activeDot} />
-                            <ThemedText variant="caption" weight="600" style={{ color: "#34C759", fontSize: 12 }}>Aktif</ThemedText>
+                            <ThemedText variant="caption" weight="600" style={{ color: "#34C759", fontSize: 12 }}>{t("active")}</ThemedText>
                           </View>
                         </View>
                       </LinearGradient>
@@ -200,7 +202,7 @@ export default function ProfileScreen() {
                   </View>
                 ) : (
                   <View style={{ gap: 12 }}>
-                    <ThemedText color="muted">Belum ada pasien terhubung.</ThemedText>
+                    <ThemedText color="muted">{t("noConnectedPatients")}</ThemedText>
                   </View>
                 )}
               </View>
@@ -215,9 +217,9 @@ export default function ProfileScreen() {
                   <View style={[styles.statIconContainer, { backgroundColor: "rgba(0,122,255,0.2)" }]}>
                     <FontAwesome6 name="chart-line" color={theme.colors.accent} size={18} />
                   </View>
-                  <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>Konsistensi</ThemedText>
+                  <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>{t("consistency")}</ThemedText>
                   <ThemedText variant="title" weight="600" style={{ fontSize: 28, marginTop: 4 }}>{adherence}%</ThemedText>
-                  <ThemedText variant="caption" color="muted">7 hari terakhir</ThemedText>
+                  <ThemedText variant="caption" color="muted">{t("last7Days")}</ThemedText>
                 </LinearGradient>
                 
                 <LinearGradient
@@ -229,9 +231,9 @@ export default function ProfileScreen() {
                   <View style={[styles.statIconContainer, { backgroundColor: "rgba(52,199,89,0.2)" }]}>
                     <FontAwesome6 name="pills" color="#34C759" size={18} />
                   </View>
-                  <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>Obat aktif</ThemedText>
+                  <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>{t("activeMeds")}</ThemedText>
                   <ThemedText variant="title" weight="600" style={{ fontSize: 28, marginTop: 4 }}>{activeMedsCount}</ThemedText>
-                  <ThemedText variant="caption" color="muted">Terjadwal</ThemedText>
+                  <ThemedText variant="caption" color="muted">{t("scheduled")}</ThemedText>
                 </LinearGradient>
               </View>
             )}

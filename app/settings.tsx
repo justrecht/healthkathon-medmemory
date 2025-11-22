@@ -6,17 +6,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CustomAlert } from "../src/components/CustomAlert";
 import { SectionHeader, Surface, ThemedText } from "../src/components/ui";
+import { Language, useLanguage } from "../src/i18n";
 import { signOutUser } from "../src/services/auth";
 import { clearScheduledNotifications, getUISettings, saveUISettings, UISettings } from "../src/services/storage";
 import { ThemeMode, useTheme } from "../src/theme";
 
 export default function SettingsScreen() {
   const { theme, mode, setMode } = useTheme();
+  const { t, language, setLanguage } = useLanguage();
   const router = useRouter();
   const [notificationSettings, setNotificationSettings] = useState<UISettings>({
     beforeSchedule: true,
   });
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -25,7 +28,7 @@ export default function SettingsScreen() {
     buttons: [] as any[]
   });
 
-  const showAlert = (title: string, message: string, buttons: any[] = [{ text: "OK" }]) => {
+  const showAlert = (title: string, message: string, buttons: any[] = [{ text: t("ok") }]) => {
     setAlertConfig({ title, message, buttons });
     setAlertVisible(true);
   };
@@ -45,6 +48,11 @@ export default function SettingsScreen() {
     setShowThemeDropdown(false);
   };
 
+  const handleLanguageChange = (selectedLanguage: Language) => {
+    setLanguage(selectedLanguage);
+    setShowLanguageDropdown(false);
+  };
+
   const handleNotificationToggle = async (setting: keyof UISettings) => {
     const newSettings = {
       ...notificationSettings,
@@ -56,29 +64,29 @@ export default function SettingsScreen() {
 
   const handleSignOut = async () => {
     showAlert(
-      "Keluar dari Akun",
-      "Apakah Anda yakin ingin keluar? Anda akan keluar dari sesi ini dan perlu masuk kembali untuk mengakses aplikasi.",
+      t("signOutTitle"),
+      t("signOutConfirm"),
       [
-        { text: "Batal", style: "cancel" },
+        { text: t("cancel"), style: "cancel" },
         { 
-          text: "Keluar", 
+          text: t("signOut"), 
           style: "destructive",
           onPress: async () => {
             try {
               await signOutUser();
               showAlert(
-                "Berhasil Keluar",
-                "Anda telah berhasil keluar dari akun. Sampai jumpa!",
+                t("signOutSuccessTitle"),
+                t("signOutSuccessDesc"),
                 [{ 
-                  text: "OK", 
+                  text: t("ok"), 
                   onPress: () => router.replace("/login")
                 }]
               );
             } catch (error) {
               showAlert(
-                "Gagal Keluar",
-                "Terjadi kesalahan saat keluar. Silakan coba lagi.",
-                [{ text: "OK" }]
+                t("signOutFailTitle"),
+                t("signOutFailDesc"),
+                [{ text: t("ok") }]
               );
             }
           }
@@ -93,7 +101,7 @@ export default function SettingsScreen() {
         options={{
           headerShown: true,
           headerTransparent: false,
-          headerTitle: "Pengaturan",
+          headerTitle: t("settings"),
           headerStyle: { backgroundColor: theme.colors.background },
           headerShadowVisible: false,
           headerTitleStyle: {
@@ -111,14 +119,14 @@ export default function SettingsScreen() {
       />
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
         <Surface>
-          <SectionHeader title="Tampilan" subtitle="Pilih tema aplikasi" />
+          <SectionHeader title={t("appearance")} subtitle={t("chooseTheme")} />
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <View style={{ flex: 1, marginRight: 14 }}>
-              <ThemedText weight="500">Mode tema</ThemedText>
+              <ThemedText weight="500">{t("themeMode")}</ThemedText>
               <ThemedText variant="caption" color="muted">
                 {mode === "dark" 
-                  ? "Mode gelap aktif" 
-                  : "Mode terang aktif"}
+                  ? t("darkModeActive") 
+                  : t("lightModeActive")}
               </ThemedText>
             </View>
             <Pressable 
@@ -126,7 +134,7 @@ export default function SettingsScreen() {
               onPress={() => setShowThemeDropdown(true)}
             >
               <ThemedText style={{ fontSize: 14 }}>
-                {mode === "dark" ? "Gelap" : "Terang"}
+                {mode === "dark" ? t("dark") : t("light")}
               </ThemedText>
               <FontAwesome6 name="chevron-down" size={12} color={theme.colors.textSecondary} />
             </Pressable>
@@ -134,26 +142,47 @@ export default function SettingsScreen() {
         </Surface>
 
         <Surface>
-          <SectionHeader title="Pengingat" subtitle="Notifikasi pengingat obat" />
+          <SectionHeader title={t("language")} subtitle={t("chooseLanguage")} />
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flex: 1, marginRight: 14 }}>
+              <ThemedText weight="500">{t("language")}</ThemedText>
+              <ThemedText variant="caption" color="muted">
+                {language === "id" ? t("indonesian") : t("english")}
+              </ThemedText>
+            </View>
+            <Pressable 
+              style={[styles.dropdownButton, { backgroundColor: theme.colors.cardMuted, borderColor: theme.colors.border }]}
+              onPress={() => setShowLanguageDropdown(true)}
+            >
+              <ThemedText style={{ fontSize: 14 }}>
+                {language === "id" ? "ID" : "EN"}
+              </ThemedText>
+              <FontAwesome6 name="chevron-down" size={12} color={theme.colors.textSecondary} />
+            </Pressable>
+          </View>
+        </Surface>
+
+        <Surface>
+          <SectionHeader title={t("reminders")} subtitle={t("reminderNotifications")} />
           <SettingToggle
             icon={<FontAwesome6 name="bell" color={theme.colors.accent} size={16} />}
-            title="Notifikasi sebelum jadwal"
-            description="Dikirim 30 menit sebelumnya"
+            title={t("notificationBefore")}
+            description={t("sent30MinBefore")}
             value={notificationSettings.beforeSchedule}
             onValueChange={() => handleNotificationToggle('beforeSchedule')}
           />
           <Pressable 
             onPress={async () => {
               showAlert(
-                "Hapus Cache Notifikasi",
-                "Ini akan menghapus semua data notifikasi yang tersimpan di perangkat. Lanjutkan?",
+                t("clearCacheTitle"),
+                t("clearCacheConfirm"),
                 [
-                  { text: "Batal", style: "cancel" },
+                  { text: t("cancel"), style: "cancel" },
                   { 
-                    text: "Hapus", 
+                    text: t("delete"), 
                     onPress: async () => {
                       await clearScheduledNotifications();
-                      showAlert("Sukses", "Cache notifikasi berhasil dihapus");
+                      showAlert(t("success"), t("cacheCleared"));
                     }
                   }
                 ]
@@ -172,8 +201,8 @@ export default function SettingsScreen() {
               <FontAwesome6 name="trash-can" color={theme.colors.textSecondary} size={16} />
             </View>
             <View style={{ flex: 1 }}>
-              <ThemedText weight="500">Hapus Cache Notifikasi</ThemedText>
-              <ThemedText variant="caption" color="muted">Perbaiki masalah notifikasi ganda</ThemedText>
+              <ThemedText weight="500">{t("clearCache")}</ThemedText>
+              <ThemedText variant="caption" color="muted">{t("fixDoubleNotif")}</ThemedText>
             </View>
             <FontAwesome6 name="chevron-right" size={12} color={theme.colors.muted} />
           </Pressable>
@@ -195,8 +224,8 @@ export default function SettingsScreen() {
               <FontAwesome6 name="right-from-bracket" color={theme.colors.danger} size={16} />
             </View>
             <View style={{ flex: 1 }}>
-              <ThemedText weight="500" style={{ color: theme.colors.danger }}>Keluar</ThemedText>
-              <ThemedText variant="caption" color="muted">Keluar dari akun Anda</ThemedText>
+              <ThemedText weight="500" style={{ color: theme.colors.danger }}>{t("signOut")}</ThemedText>
+              <ThemedText variant="caption" color="muted">{t("signOutDesc")}</ThemedText>
             </View>
             <FontAwesome6 name="chevron-right" size={12} color={theme.colors.muted} />
           </Pressable>
@@ -219,14 +248,41 @@ export default function SettingsScreen() {
               onPress={() => handleThemeChange("light")}
             >
               <FontAwesome6 name="sun" size={16} color={theme.colors.accent} />
-              <ThemedText weight={mode === "light" ? "600" : "400"}>Terang</ThemedText>
+              <ThemedText weight={mode === "light" ? "600" : "400"}>{t("light")}</ThemedText>
             </Pressable>
             <Pressable
               style={[styles.dropdownItem, mode === "dark" && { backgroundColor: theme.colors.cardMuted }]}
               onPress={() => handleThemeChange("dark")}
             >
               <FontAwesome6 name="moon" size={16} color={theme.colors.accent} />
-              <ThemedText weight={mode === "dark" ? "600" : "400"}>Gelap</ThemedText>
+              <ThemedText weight={mode === "dark" ? "600" : "400"}>{t("dark")}</ThemedText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showLanguageDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLanguageDropdown(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay} 
+          onPress={() => setShowLanguageDropdown(false)}
+        >
+          <View style={[styles.dropdownModal, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Pressable
+              style={[styles.dropdownItem, language === "id" && { backgroundColor: theme.colors.cardMuted }]}
+              onPress={() => handleLanguageChange("id")}
+            >
+              <ThemedText weight={language === "id" ? "600" : "400"}>Bahasa Indonesia</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.dropdownItem, language === "en" && { backgroundColor: theme.colors.cardMuted }]}
+              onPress={() => handleLanguageChange("en")}
+            >
+              <ThemedText weight={language === "en" ? "600" : "400"}>English</ThemedText>
             </Pressable>
           </View>
         </Pressable>

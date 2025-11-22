@@ -6,6 +6,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleShee
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "../src/components/ui";
+import { useLanguage } from "../src/i18n";
 import { signInWithEmail, signUpWithEmail } from "../src/services/auth";
 import { useTheme } from "../src/theme";
 
@@ -46,6 +47,7 @@ function PrimaryButton({ title, onPress, loading }: any) {
 // Komponen Role Selector dikembalikan ke sini
 function RoleSelector({ role, setRole }: { role: 'patient' | 'caregiver', setRole: (role: 'patient' | 'caregiver') => void }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   return (
     <View style={{ flexDirection: 'row', gap: 12 }}>
       <Pressable 
@@ -59,7 +61,7 @@ function RoleSelector({ role, setRole }: { role: 'patient' | 'caregiver', setRol
         ]}
       >
         <FontAwesome6 name="user-injured" size={16} color={role === 'patient' ? 'white' : theme.colors.muted} />
-        <ThemedText style={{ color: role === 'patient' ? 'white' : theme.colors.muted, fontWeight: '600' }}>Pasien</ThemedText>
+        <ThemedText style={{ color: role === 'patient' ? 'white' : theme.colors.muted, fontWeight: '600' }}>{t("patient")}</ThemedText>
       </Pressable>
       <Pressable 
         onPress={() => setRole('caregiver')}
@@ -72,7 +74,7 @@ function RoleSelector({ role, setRole }: { role: 'patient' | 'caregiver', setRol
         ]}
       >
         <FontAwesome6 name="user-nurse" size={16} color={role === 'caregiver' ? 'white' : theme.colors.muted} />
-        <ThemedText style={{ color: role === 'caregiver' ? 'white' : theme.colors.muted, fontWeight: '600' }}>Caregiver</ThemedText>
+        <ThemedText style={{ color: role === 'caregiver' ? 'white' : theme.colors.muted, fontWeight: '600' }}>{t("caregiver")}</ThemedText>
       </Pressable>
     </View>
   );
@@ -82,12 +84,12 @@ function RoleSelector({ role, setRole }: { role: 'patient' | 'caregiver', setRol
 
 export default function LoginScreen() {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  // Menambahkan state untuk Role
   const [role, setRole] = useState<'patient' | 'caregiver'>('patient');
   
   const [isRegistering, setIsRegistering] = useState(false);
@@ -97,11 +99,10 @@ export default function LoginScreen() {
   const handleAuth = async () => {
     if (!email || !password || (isRegistering && !name)) return;
     
-    // Validasi Password sederhana saat register
     if (isRegistering) {
         const passwordValid = /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(password);
         if (!passwordValid) {
-          alert("Password harus minimal 8 karakter, ada huruf besar dan angka.");
+          alert(t("passwordRequirement"));
           return;
         }
     }
@@ -109,7 +110,6 @@ export default function LoginScreen() {
     setAuthLoading(true);
     let result;
     if (isRegistering) {
-        // Menggunakan variable 'role' yang dipilih user, bukan hardcode "patient"
         result = await signUpWithEmail(email, password, name, role);
     } else {
         result = await signInWithEmail(email, password);
@@ -131,45 +131,45 @@ export default function LoginScreen() {
             <FontAwesome6 name={isRegistering ? "user-plus" : "right-to-bracket"} color={theme.colors.accent} size={32} />
           </View>
           <ThemedText variant="heading" weight="700" style={{ marginTop: 16 }}>
-            {isRegistering ? "Buat Akun Baru" : "Masuk"}
+            {isRegistering ? t("createAccount") : t("login")}
           </ThemedText>
           <ThemedText variant="body" color="muted" style={{ textAlign: 'center', marginTop: 8 }}>
             {isRegistering 
-              ? "Daftar untuk mulai memantau kesehatan." 
-              : "Masuk untuk mengakses akun Anda."}
+              ? t("registerDesc") 
+              : t("loginDesc")}
           </ThemedText>
         </View>
 
         <View style={{ width: "100%", marginTop: 24, gap: 16 }}>
           {isRegistering && (
             <>
-              <StyledInput icon="user" placeholder="Nama Lengkap" value={name} onChangeText={setName} />
+              <StyledInput icon="user" placeholder={t("fullName")} value={name} onChangeText={setName} />
               {/* Menampilkan RoleSelector hanya saat Register */}
               <RoleSelector role={role} setRole={setRole} />
             </>
           )}
           
-          <StyledInput icon="envelope" placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          <StyledInput icon="envelope" placeholder={t("email")} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
           
           <View style={[styles.inputContainer, { backgroundColor: theme.colors.cardMuted, borderColor: theme.colors.border }]}>
             <View style={{ width: 40, alignItems: "center", justifyContent: "center" }}>
               <FontAwesome6 name="lock" size={16} color={theme.colors.muted} />
             </View>
-            <TextInput style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={theme.colors.muted} secureTextEntry={!showPassword} />
+            <TextInput style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} value={password} onChangeText={setPassword} placeholder={t("password")} placeholderTextColor={theme.colors.muted} secureTextEntry={!showPassword} />
             <Pressable onPress={() => setShowPassword(s => !s)} style={{ width: 48, alignItems: "center", justifyContent: "center" }}>
               <FontAwesome6 name={showPassword ? "eye" : "eye-slash"} size={16} color={theme.colors.muted} />
             </Pressable>
           </View>
 
           <View style={{ marginTop: 8 }}>
-            <PrimaryButton title={isRegistering ? "Daftar Sekarang" : "Masuk"} onPress={handleAuth} loading={authLoading} />
+            <PrimaryButton title={isRegistering ? t("registerNow") : t("login")} onPress={handleAuth} loading={authLoading} />
           </View>
 
           <Pressable onPress={() => setIsRegistering(s => !s)} style={{ alignItems: "center", marginTop: 16, padding: 8 }}>
             <ThemedText variant="body" color="muted">
-              {isRegistering ? "Sudah punya akun? " : "Belum punya akun? "}
+              {isRegistering ? t("alreadyHaveAccount") : t("dontHaveAccount")}
               <ThemedText variant="body" color="primary" weight="600">
-                {isRegistering ? "Masuk" : "Daftar"}
+                {isRegistering ? t("login") : t("register")}
               </ThemedText>
             </ThemedText>
           </Pressable>

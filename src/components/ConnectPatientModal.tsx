@@ -9,6 +9,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { useLanguage } from "../i18n";
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
 
@@ -26,6 +27,7 @@ export function ConnectPatientModal({
   loading = false,
 }: ConnectPatientModalProps) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
 
   const handleSubmit = () => {
@@ -61,10 +63,10 @@ export function ConnectPatientModal({
             </View>
             <View style={{ flex: 1 }}>
               <ThemedText variant="subheading" weight="600">
-                Hubungkan Pasien
+                {t("connectPatient")}
               </ThemedText>
               <ThemedText variant="caption" color="muted">
-                Masukkan email pasien untuk terhubung
+                {t("enterPatientEmail")}
               </ThemedText>
             </View>
             <Pressable onPress={onClose} style={styles.closeButton}>
@@ -75,7 +77,7 @@ export function ConnectPatientModal({
           <View style={styles.content}>
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" style={{ marginBottom: 8 }}>
-                Email Pasien
+                {t("patientEmail")}
               </ThemedText>
               <View
                 style={[
@@ -100,7 +102,7 @@ export function ConnectPatientModal({
                       fontFamily: theme.typography.fontFamily,
                     },
                   ]}
-                  placeholder="contoh@email.com"
+                  placeholder={t("emailPlaceholder")}
                   placeholderTextColor={theme.colors.muted}
                   value={email}
                   onChangeText={setEmail}
@@ -123,7 +125,7 @@ export function ConnectPatientModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily },
                 ]}
               >
-                Batal
+                {t("cancel")}
               </Text>
             </Pressable>
             <Pressable
@@ -143,7 +145,7 @@ export function ConnectPatientModal({
                   { color: "white", fontFamily: theme.typography.fontFamily },
                 ]}
               >
-                {loading ? "Mengirim..." : "Kirim Permintaan"}
+                {loading ? t("sending") : t("sendRequest")}
               </Text>
             </Pressable>
           </View>

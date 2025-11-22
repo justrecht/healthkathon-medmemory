@@ -2,10 +2,12 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 
+import { useLanguage } from "../../src/i18n";
 import { useTheme } from "../../src/theme";
 
 export default function TabsLayout() {
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   return (
     <Tabs
@@ -33,7 +35,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "Beranda",
+          title: t("home"),
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
               <FontAwesome6 name="house" solid color={color} size={20} />
@@ -44,7 +46,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
+          title: t("profile"),
           tabBarIcon: ({ color, size }) => (
             <View style={{ alignItems: "center" }}>
               <FontAwesome6 name="user" solid color={color} size={20} />

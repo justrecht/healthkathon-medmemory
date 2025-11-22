@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
 import { Animated, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { useLanguage } from "../i18n";
 import { useTheme } from "../theme";
 import { ThemedText } from "./ui";
 
@@ -24,17 +25,19 @@ export function AddMedicationModal({
   onMedicationChange,
   mode = "add",
 }: AddMedicationModalProps) {
+  const { theme, mode: themeMode } = useTheme();
+  const { t } = useLanguage();
+
   // Common medication times
   const commonTimes = [
-    { label: "Pagi", time: "07:00", icon: "cloud-sun", desc: "Setelah bangun" },
-    { label: "Sarapan", time: "08:00", icon: "mug-hot", desc: "Saat makan pagi" },
-    { label: "Siang", time: "12:00", icon: "sun", desc: "Saat makan siang" },
-    { label: "Sore", time: "15:00", icon: "cloud-sun", desc: "Sore hari" },
-    { label: "Malam", time: "18:00", icon: "moon", desc: "Saat makan malam" },
-    { label: "Tidur", time: "21:00", icon: "bed", desc: "Sebelum tidur" },
+    { label: t("morning"), time: "07:00", icon: "cloud-sun", desc: t("afterWakeUp") },
+    { label: t("breakfast"), time: "08:00", icon: "mug-hot", desc: t("atBreakfast") },
+    { label: t("noon"), time: "12:00", icon: "sun", desc: t("atLunch") },
+    { label: t("afternoon"), time: "15:00", icon: "cloud-sun", desc: t("afternoonTime") },
+    { label: t("evening"), time: "18:00", icon: "moon", desc: t("atDinner") },
+    { label: t("bedtime"), time: "21:00", icon: "bed", desc: t("beforeSleep") },
   ];
 
-  const { theme, mode: themeMode } = useTheme();
   const [showCustomTime, setShowCustomTime] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -97,7 +100,7 @@ export function AddMedicationModal({
         >
           <View style={styles.header}>
             <ThemedText variant="heading" weight="700">
-              {mode === "edit" ? "Ubah Pengingat Obat" : "Tambah Pengingat Obat"}
+              {mode === "edit" ? t("editReminder") : t("addReminder")}
             </ThemedText>
             <Pressable onPress={onClose}>
               <FontAwesome6 name="xmark" color={theme.colors.textSecondary} size={24} />
@@ -107,7 +110,7 @@ export function AddMedicationModal({
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" color="secondary" style={styles.label}>
-                Nama Obat *
+                {t("medicationName")} *
               </ThemedText>
               <TextInput
                 style={[
@@ -118,7 +121,7 @@ export function AddMedicationModal({
                     borderColor: theme.colors.border,
                   },
                 ]}
-                placeholder="Contoh: Metformin"
+                placeholder={t("medicationNamePlaceholder")}
                 placeholderTextColor={theme.colors.muted}
                 value={medication.title}
                 onChangeText={(text) => handleInputChange("title", text)}
@@ -127,7 +130,7 @@ export function AddMedicationModal({
 
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" color="secondary" style={styles.label}>
-                Dosis *
+                {t("dosage")} *
               </ThemedText>
               <View
                 style={[
@@ -149,7 +152,7 @@ export function AddMedicationModal({
                     fontSize: 15,
                     padding: 0,
                   }}
-                  placeholder="Contoh: 500"
+                  placeholder={t("dosagePlaceholder")}
                   placeholderTextColor={theme.colors.muted}
                   keyboardType="numeric"
                   value={medication.dosage ? String(medication.dosage).replace(/[^0-9]/g, "") : ""}
@@ -165,7 +168,7 @@ export function AddMedicationModal({
             <View style={styles.inputGroup}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <ThemedText variant="caption" color="secondary" style={styles.label}>
-                  Waktu Minum Obat *
+                  {t("consumptionTime")} *
                 </ThemedText>
                 {medication.time && (
                   <View style={[styles.selectedTimeBadge, { backgroundColor: themeMode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)" }]}>
@@ -270,7 +273,7 @@ export function AddMedicationModal({
                   >
                     <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
                     <ThemedText weight="600" style={{ color: theme.colors.accent }}>
-                      Atur Waktu Kustom
+                      {t("setCustomTime")}
                     </ThemedText>
                   </Pressable>
                 </>
@@ -284,7 +287,7 @@ export function AddMedicationModal({
                     }]}>
                       <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
                       <ThemedText variant="caption" weight="600" style={{ color: theme.colors.accent }}>
-                        Waktu terpilih: {medication.time || "00:00"}
+                        {t("selectedTime")}: {medication.time || "00:00"}
                       </ThemedText>
                     </View>
                     
@@ -302,7 +305,7 @@ export function AddMedicationModal({
                     >
                       <FontAwesome6 name="clock" color="#FFFFFF" size={16} />
                       <ThemedText weight="600" style={{ color: "#FFFFFF" }}>
-                        Ubah Waktu
+                        {t("changeTime")}
                       </ThemedText>
                     </Pressable>
                   </View>
@@ -321,7 +324,7 @@ export function AddMedicationModal({
                   >
                     <FontAwesome6 name="arrow-left" color={theme.colors.accent} size={16} />
                     <ThemedText weight="600" style={{ color: theme.colors.accent }}>
-                      Kembali ke Preset
+                      {t("backToPresets")}
                     </ThemedText>
                   </Pressable>
                   
@@ -361,7 +364,7 @@ export function AddMedicationModal({
 
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" color="secondary" style={styles.label}>
-                Ulangi Hari
+                {t("repeatDays")}
               </ThemedText>
               <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 4 }}>
                 {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((day, index) => {
@@ -407,7 +410,7 @@ export function AddMedicationModal({
 
             <View style={styles.inputGroup}>
               <ThemedText variant="caption" color="secondary" style={styles.label}>
-                Catatan (Opsional)
+                {t("notesOptional")}
               </ThemedText>
               <TextInput
                 style={[
@@ -419,7 +422,7 @@ export function AddMedicationModal({
                     borderColor: theme.colors.border,
                   },
                 ]}
-                placeholder="Catatan tambahan..."
+                placeholder={t("notesPlaceholder")}
                 placeholderTextColor={theme.colors.muted}
                 value={medication.notes}
                 onChangeText={(text) => handleInputChange("notes", text)}
@@ -443,7 +446,7 @@ export function AddMedicationModal({
             disabled={!medication.title || !medication.dosage || !medication.time || (medication.repeatDays && medication.repeatDays.length === 0)}
             onPress={() => onAdd(medication)}
           >
-            <Text style={styles.submitButtonText}>{mode === "edit" ? "Simpan Perubahan" : "Simpan Pengingat"}</Text>
+            <Text style={styles.submitButtonText}>{mode === "edit" ? t("saveChanges") : t("saveReminder")}</Text>
           </Pressable>
         </View>
       </Pressable>
