@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../src/config/firebase";
@@ -17,10 +17,7 @@ import { MedicationHistoryModal } from "../../src/components/MedicationHistoryMo
 import RemindersModal from "../../src/components/RemindersModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-  GradientChip,
-  SectionHeader,
-  Surface,
-  ThemedText,
+  ThemedText
 } from "../../src/components/ui";
 import {
   getConnectedPatients,
@@ -83,6 +80,7 @@ export default function HomeScreen() {
   const [connectedPatients, setConnectedPatients] = useState<ConnectedUser[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const notificationsScheduledRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -147,7 +145,8 @@ export default function HomeScreen() {
 
   // Schedule notifications when reminders change (but only once per reminder)
   useEffect(() => {
-    if (reminders.length > 0 && !loading) {
+    if (reminders.length > 0 && !loading && !notificationsScheduledRef.current) {
+      notificationsScheduledRef.current = true;
       scheduleAllNotifications();
     }
   }, [reminders.length, loading]);
@@ -235,6 +234,37 @@ export default function HomeScreen() {
     }
   }
 
+  async function resetDailyMedicationStatus(reminders: any[]) {
+    const today = new Date().toISOString().split('T')[0]; // Get YYYY-MM-DD
+    const updatedReminders = [];
+    
+    for (const reminder of reminders) {
+      if (reminder.status === 'taken' && reminder.lastTakenDate) {
+        const takenDate = reminder.lastTakenDate.split('T')[0];
+        
+        // If taken date is not today, reset to scheduled
+        if (takenDate !== today) {
+          try {
+            await updateReminderInStore(reminder.id, { 
+              status: 'scheduled',
+              lastTakenDate: null 
+            } as any);
+            updatedReminders.push({ ...reminder, status: 'scheduled', lastTakenDate: null });
+          } catch (error) {
+            console.error('Error resetting reminder status:', error);
+            updatedReminders.push(reminder);
+          }
+        } else {
+          updatedReminders.push(reminder);
+        }
+      } else {
+        updatedReminders.push(reminder);
+      }
+    }
+    
+    return updatedReminders;
+  }
+
   async function loadData() {
     try {
       const [adherencePercent, dailyData, remoteReminders] = await Promise.all([
@@ -243,12 +273,48 @@ export default function HomeScreen() {
         getRemindersFromStore(),
       ]);
 
+      // Reset daily medication statuses
+      const resetReminders = await resetDailyMedicationStatus(remoteReminders);
+      
       // Load reminders from Firestore
       // Sort by time to ensure order is correct
-      remoteReminders.sort((a: any, b: any) => a.time.localeCompare(b.time));
-      setReminders(remoteReminders);
+      resetReminders.sort((a: any, b: any) => a.time.localeCompare(b.time));
+      setReminders(resetReminders);
       setAdherencePercentage(adherencePercent);
-      setCaregivers([]);
+      
+      // Load connected caregivers if user is logged in
+      if (auth.currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const caregiverIds = userData.caregivers || [];
+            
+            if (caregiverIds.length > 0) {
+              // Fetch caregiver details
+              const caregiverPromises = caregiverIds.map(async (caregiverId: string) => {
+                const caregiverDoc = await getDoc(doc(db, "users", caregiverId));
+                if (caregiverDoc.exists()) {
+                  return { id: caregiverDoc.id, ...caregiverDoc.data() };
+                }
+                return null;
+              });
+              
+              const caregiverDetails = await Promise.all(caregiverPromises);
+              setCaregivers(caregiverDetails.filter(c => c !== null) as any);
+            } else {
+              setCaregivers([]);
+            }
+          } else {
+            setCaregivers([]);
+          }
+        } catch (error) {
+          console.error("Error loading caregivers:", error);
+          setCaregivers([]);
+        }
+      } else {
+        setCaregivers([]);
+      }
       
       if (dailyData.length > 0) {
         setAdherenceData(dailyData);
@@ -265,10 +331,10 @@ export default function HomeScreen() {
 
   async function scheduleAllNotifications() {
     try {
-      console.log(`Scheduling notifications for ${reminders.length} reminders`);
+      console.log(`Checking notifications for ${reminders.length} reminders`);
       for (const reminder of reminders) {
         if (reminder.status === "scheduled") {
-          console.log(`Scheduling reminder: ${reminder.title} at ${reminder.time}`);
+          // Pass forceReschedule=false so it only schedules if not already scheduled
           await scheduleReminderNotification({
             id: reminder.id,
             title: reminder.title,
@@ -276,10 +342,10 @@ export default function HomeScreen() {
             time: reminder.time,
             notes: reminder.notes,
             repeatDays: reminder.repeatDays,
-          });
+          }, false);
         }
       }
-      console.log("All notifications scheduled successfully");
+      console.log("Notification check completed");
     } catch (error) {
       console.error("Error scheduling notifications:", error);
     }
@@ -320,11 +386,22 @@ export default function HomeScreen() {
       setShowAddModal(false);
       setNewMedication({ title: "", dosage: "", time: "", notes: "", repeatDays: [0,1,2,3,4,5,6] });
 
-      // Persist to Firestore then update local state; scheduling will be handled by effect
+      // Persist to Firestore then update local state
       await createReminderInStore(newReminder as any);
       setReminders((prev) => [...prev, newReminder]);
       setActiveRemindersCount((c) => c + 1);
-      console.log("Reminder saved to Firestore and local state updated");
+      
+      // Schedule notifications for the new reminder immediately
+      await scheduleReminderNotification({
+        id: newReminder.id,
+        title: newReminder.title,
+        dosage: newReminder.dosage,
+        time: newReminder.time,
+        notes: newReminder.notes,
+        repeatDays: newReminder.repeatDays,
+      }, true);
+      
+      console.log("Reminder saved to Firestore and notifications scheduled");
 
       // Show success alert after modal is closed
       setTimeout(() => {
@@ -392,10 +469,10 @@ export default function HomeScreen() {
               // Update local list
               setReminders((prev) => prev.map((r) => r.id === selectedReminderId ? { ...r, ...data } : r));
 
-              // Reschedule notifications for this reminder
+              // Reschedule notifications for this reminder (force reschedule)
               await cancelMedicationNotifications(selectedReminderId);
               const updated = { id: selectedReminderId, ...data, status: "scheduled" } as any;
-              await scheduleReminderNotification(updated);
+              await scheduleReminderNotification(updated, true);
 
               showAlert(
                 "Berhasil",
@@ -461,12 +538,13 @@ export default function HomeScreen() {
         setMedicationHistory(prev => [record, ...prev]);
       }
 
-      // Update UI
+      // Update UI with current date
+      const now = new Date().toISOString();
       setReminders((prev) =>
-        prev.map((r) => (r.id === targetId ? { ...r, status: "taken" } : r))
+        prev.map((r) => (r.id === targetId ? { ...r, status: "taken", lastTakenDate: now } : r))
       );
-      // Persist status change to Firestore
-      await updateReminderInStore(targetId, { status: "taken" } as any);
+      // Persist status change to Firestore with date
+      await updateReminderInStore(targetId, { status: "taken", lastTakenDate: now } as any);
 
       // Cancel any pending notifications for this medication (e.g. the "After" reminder)
       await cancelMedicationNotifications(targetId);
@@ -601,85 +679,85 @@ export default function HomeScreen() {
   }, [reminders, caregivers]);
 
   const nextReminder = reminders
-    .filter(r => r.status === 'scheduled')
+    .filter(r => r.status === 'scheduled' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay())))
     .sort((a, b) => a.time.localeCompare(b.time))[0];
 
   if (userRole === 'caregiver') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: mode === "dark" ? "#000000" : "#F2F2F7" }]}>
         <StatusBar style={mode === "dark" ? "light" : "dark"} />
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { padding: theme.spacing.md, gap: theme.spacing.md }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
           showsVerticalScrollIndicator={false}
         >
-          <Surface padding={false}>
-            <LinearGradient
-              colors={theme.colors.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.hero}
-            >
-              <View style={styles.heroHeader}>
-                <ThemedText variant="title" weight="700" style={styles.heroTitle}>
-                  MedMemory
-                </ThemedText>
-                <FontAwesome6 name="user-nurse" color="white" size={24} />
-              </View>
-              <Text style={styles.heroSubtitle}>Mode Pendamping (Caregiver)</Text>
-            </LinearGradient>
-          </Surface>
+          <View style={styles.header}>
+            <View>
+              <Text style={[styles.headerDate, { color: theme.colors.textSecondary }]}>
+                {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}
+              </Text>
+              <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>Ringkasan</Text>
+            </View>
+            <Pressable style={[styles.profileButton, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#E5E5EA" }]}>
+              <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={20} />
+            </Pressable>
+          </View>
 
-          <Surface>
-            {connectedPatients.length > 0 ? (
-              <View>
-                <SectionHeader 
-                  title="Pasien Terhubung" 
-                  subtitle={`${connectedPatients.length} pasien dalam pantauan`}
-                  actionLabel="Tambah"
-                  onActionPress={() => setShowConnectModal(true)}
-                />
-                <View style={{ gap: 12 }}>
-                  {connectedPatients.map((patient) => (
-                    <Pressable 
-                      key={patient.uid} 
-                      style={[
-                        styles.caregiverRow, 
-                        { 
-                          backgroundColor: theme.colors.cardMuted,
-                          padding: 12,
-                          borderRadius: 12,
-                          marginBottom: 0
-                        }
-                      ]}
-                      onPress={() => router.push({ pathname: "/patient-detail", params: { patientId: patient.uid } })}
-                    >
-                      <View style={[styles.reminderIcon, { backgroundColor: theme.colors.background }]}>
-                        <FontAwesome6 name="user" color={theme.colors.textPrimary} size={16} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <ThemedText weight="600">{patient.name}</ThemedText>
-                        <ThemedText variant="caption" color="muted">{patient.email}</ThemedText>
-                      </View>
-                      <FontAwesome6 name="chevron-right" color={theme.colors.muted} size={14} />
-                    </Pressable>
-                  ))}
+          <View style={[styles.summaryCard, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF" }]}>
+             <View style={styles.summaryHeader}>
+                <View>
+                  <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>Mode Caregiver</Text>
+                  <Text style={[styles.summarySubtitle, { color: theme.colors.textSecondary }]}>Memantau {connectedPatients.length} Pasien</Text>
                 </View>
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <FontAwesome6 name="users" color={theme.colors.muted} size={48} />
-                <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pasien terhubung</ThemedText>
-                <ThemedText variant="caption" color="muted">Hubungkan pasien untuk memantau pengobatan mereka</ThemedText>
-                
-                <Pressable
-                  style={[styles.primaryButton, { backgroundColor: theme.colors.accent, marginTop: 16, width: '100%' }]}
-                  onPress={() => setShowConnectModal(true)}
+                <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={24} />
+             </View>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Pasien Terhubung</Text>
+              <Pressable onPress={() => setShowConnectModal(true)}>
+                 <Text style={{ color: theme.colors.accent, fontSize: 17, fontWeight: "600" }}>Tambah</Text>
+              </Pressable>
+            </View>
+            <View style={{ gap: 12, paddingHorizontal: 20 }}>
+              {connectedPatients.length > 0 ? connectedPatients.map((patient) => (
+                <Pressable 
+                  key={patient.uid} 
+                  style={[
+                    styles.caregiverRow, 
+                    { 
+                      marginBottom: 0,
+                      backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF",
+                      borderRadius: 12
+                    }
+                  ]}
+                  onPress={() => router.push({ pathname: "/patient-detail", params: { patientId: patient.uid } })}
                 >
-                  <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Hubungkan Pasien</Text>
+                  <View style={[styles.reminderIcon, { backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }]}>
+                    <FontAwesome6 name="user" color={theme.colors.accent} size={16} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText weight="600" style={{ fontSize: 17 }}>{patient.name}</ThemedText>
+                    <ThemedText variant="caption" color="muted" style={{ fontSize: 15 }}>{patient.email}</ThemedText>
+                  </View>
+                  <FontAwesome6 name="chevron-right" color={theme.colors.muted} size={14} />
                 </Pressable>
-              </View>
-            )}
-          </Surface>
+              )) : (
+                <View style={[styles.emptyState, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF", borderRadius: 12, padding: 24 }]}>
+                  <FontAwesome6 name="users" color={theme.colors.muted} size={48} />
+                  <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pasien terhubung</ThemedText>
+                  <ThemedText variant="caption" color="muted">Hubungkan pasien untuk memantau pengobatan mereka</ThemedText>
+                  
+                  <Pressable
+                    style={[styles.primaryButton, { backgroundColor: theme.colors.accent, marginTop: 16, width: '100%' }]}
+                    onPress={() => setShowConnectModal(true)}
+                  >
+                    <Text style={styles.primaryButtonText}>Hubungkan Pasien</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          </View>
         </ScrollView>
 
         <ConnectPatientModal
@@ -703,276 +781,505 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: mode === "dark" ? "#000000" : "#F2F2F7" }]}>
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { padding: theme.spacing.md, gap: theme.spacing.md }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Surface padding={false}>
-          <LinearGradient
-            colors={theme.colors.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.hero}
-          >
-            <View style={styles.heroHeader}>
-              <ThemedText variant="title" weight="700" style={styles.heroTitle}>
-                MedMemory
-              </ThemedText>
-              <FontAwesome6 name="bell" color="white" size={24} />
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.headerDate, { color: theme.colors.textSecondary }]}>
+              {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>Ringkasan</Text>
+          </View>
+          <Pressable style={[styles.profileButton, { backgroundColor: mode === "dark" ? "#1C1C1E" : "#E5E5EA" }]}>
+            <FontAwesome6 name="user" color={theme.colors.accent} size={20} />
+          </Pressable>
+        </View>
+
+        <LinearGradient
+          colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.summaryCard}
+        >
+          <View style={styles.summaryHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>Kepatuhan Hari Ini</Text>
+              <Text style={[styles.summarySubtitle, { color: theme.colors.textSecondary }]}>Tetap konsisten ya!</Text>
             </View>
-            <Text style={styles.heroSubtitle}>Pendamping terapi untuk peserta JKN</Text>
-            <View style={styles.heroTags}>
-              <GradientChip label={`Konsistensi ${adherencePercentage}%`} />
-              <GradientChip label={`${activeRemindersCount} pengingat`} />
+            <LinearGradient
+              colors={theme.colors.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientIconContainer}
+            >
+              <FontAwesome6 name="chart-pie" color="#FFFFFF" size={22} />
+            </LinearGradient>
+          </View>
+          
+          <View style={styles.progressContainer}>
+            <View style={styles.progressRow}>
+              <LinearGradient
+                colors={theme.colors.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ borderRadius: 12 }}
+              >
+                <Text style={[styles.percentageText, { 
+                  color: "#FFFFFF",
+                  textShadowColor: 'rgba(0,0,0,0.1)',
+                  textShadowOffset: { width: 0, height: 1 },
+                  textShadowRadius: 2,
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                }]}>{adherencePercentage}%</Text>
+              </LinearGradient>
+              <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 12 }}>
+                <Text style={[styles.percentageLabel, { color: theme.colors.textSecondary, fontSize: 16 }]}>tercapai</Text>
+                <Text style={[styles.percentageSubtext, { color: theme.colors.textSecondary }]}>
+                  {reminders.filter(r => r.status === 'taken' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay()))).length} dari {reminders.filter(r => !r.repeatDays || r.repeatDays.includes(new Date().getDay())).length} dosis
+                </Text>
+              </View>
             </View>
-          </LinearGradient>
-        </Surface>
+            
+            <View style={styles.progressBarContainer}>
+              <View style={[styles.progressBarBackground, { 
+                backgroundColor: mode === "dark" ? "#2C2C2E" : "#E5E5EA",
+                shadowColor: mode === "dark" ? "#000" : "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: mode === "dark" ? 0.5 : 0.1,
+                shadowRadius: 4,
+                elevation: 2,
+              }]}>
+                <LinearGradient
+                  colors={theme.colors.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.progressBarFill, { 
+                    width: `${adherencePercentage}%`,
+                    shadowColor: theme.colors.accent,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.5,
+                    shadowRadius: 8,
+                  }]}
+                />
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.statsRow}>
+             <View style={styles.statItem}>
+                <LinearGradient
+                  colors={[mode === "dark" ? "rgba(0,122,255,0.3)" : "rgba(0,122,255,0.15)", mode === "dark" ? "rgba(0,122,255,0.1)" : "rgba(0,122,255,0.05)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statIconContainer}
+                >
+                  <FontAwesome6 name="calendar-check" color={theme.colors.accent} size={18} />
+                </LinearGradient>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{reminders.filter(r => !r.repeatDays || r.repeatDays.includes(new Date().getDay())).length}</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Jadwal Hari Ini</Text>
+             </View>
+             <View style={[styles.statItem, { borderLeftWidth: 1, borderLeftColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', paddingLeft: 20 }]}>
+                <LinearGradient
+                  colors={[mode === "dark" ? "rgba(52,199,89,0.3)" : "rgba(52,199,89,0.15)", mode === "dark" ? "rgba(52,199,89,0.1)" : "rgba(52,199,89,0.05)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statIconContainer}
+                >
+                  <FontAwesome6 name="check-circle" color="#34C759" size={18} />
+                </LinearGradient>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{reminders.filter(r => r.status === 'taken' && (!r.repeatDays || r.repeatDays.includes(new Date().getDay()))).length}</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Diminum Hari Ini</Text>
+             </View>
+          </View>
+        </LinearGradient>
 
         {pendingRequests.length > 0 && (
-          <Surface>
-            <SectionHeader title="Permintaan Koneksi" subtitle="Caregiver ingin terhubung" />
-            <View style={{ gap: 12 }}>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Permintaan Koneksi</Text>
+            </View>
+            <View style={{ gap: 12, paddingHorizontal: 20 }}>
               {pendingRequests.map((request) => (
                 <View 
                   key={request.id} 
                   style={[
                     styles.caregiverRow, 
                     { 
-                      backgroundColor: theme.colors.cardMuted,
-                      padding: 12,
-                      borderRadius: 12,
-                      marginBottom: 0,
                       flexDirection: 'column',
                       alignItems: 'flex-start',
-                      gap: 8
+                      gap: 12,
+                      backgroundColor: mode === "dark" ? "#1C1C1E" : "#FFFFFF",
+                      borderRadius: 12
                     }
                   ]}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                    <View style={[styles.reminderIcon, { backgroundColor: theme.colors.background }]}>
+                    <View style={[styles.reminderIcon, { backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }]}>
                       <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={16} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <ThemedText weight="600">{request.caregiverName}</ThemedText>
+                      <ThemedText weight="600" style={{ fontSize: 17 }}>{request.caregiverName}</ThemedText>
                       <ThemedText variant="caption" color="muted">{request.caregiverEmail}</ThemedText>
                     </View>
                   </View>
                   
-                  <View style={{ flexDirection: 'row', gap: 8, width: '100%', marginTop: 4 }}>
+                  <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
                     <Pressable 
-                      style={{ flex: 1, padding: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border }}
+                      style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7" }}
                       onPress={() => handleRespondRequest(request.id, false)}
                     >
-                      <ThemedText variant="caption" weight="600">Tolak</ThemedText>
+                      <ThemedText variant="caption" weight="600" style={{ color: "#FF3B30", fontSize: 15 }}>Tolak</ThemedText>
                     </Pressable>
                     <Pressable 
-                      style={{ flex: 1, padding: 8, alignItems: 'center', borderRadius: 8, backgroundColor: theme.colors.accent }}
+                      style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: theme.colors.accent }}
                       onPress={() => handleRespondRequest(request.id, true)}
                     >
-                      <ThemedText variant="caption" weight="600" style={{ color: 'white' }}>Terima</ThemedText>
+                      <ThemedText variant="caption" weight="600" style={{ color: 'white', fontSize: 15 }}>Terima</ThemedText>
                     </Pressable>
                   </View>
                 </View>
               ))}
             </View>
-          </Surface>
+          </View>
         )}
 
-        <Surface>
-          <SectionHeader
-            title="Dosis berikutnya"
-            subtitle="Tambahkan jika belum ada"
-            actionLabel="Tambah"
-            onActionPress={() => setShowAddModal(true)}
-          />
-          {nextReminder ? (
-            <>
-            <View style={styles.nextDoseRow}>
-              <View style={[styles.pillIcon, { backgroundColor: theme.colors.cardMuted }]}>
-                <FontAwesome6 name="pills" color={theme.colors.accent} size={18} />
-              </View>
-              <View style={styles.nextDoseContent}>
-                  <ThemedText variant="subheading" weight="600">
-                    {nextReminder.title}
-                  </ThemedText>
-                  <ThemedText variant="caption" color="secondary">{nextReminder.dosage}</ThemedText>
-                  <ThemedText variant="caption" color="muted">{nextReminder.notes}</ThemedText>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <ThemedText variant="subheading" weight="600">
-                    {nextReminder.time}
-                  </ThemedText>
-                  <ThemedText variant="caption" color="muted">
-                    hari ini
-                  </ThemedText>
-                </View>
-              </View>
-              <Pressable
-                style={[styles.primaryButton, { backgroundColor: theme.colors.accent }]}
-                onPress={handlePressConfirmButton}
-              >
-                <Text style={[styles.primaryButtonText, { fontFamily: theme.typography.fontFamily }]}>Udah minum obat</Text>
-              </Pressable>
-            </>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome6 name="calendar-plus" color={theme.colors.muted} size={48} />
-              <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat nih</ThemedText>
-              <ThemedText variant="caption" color="muted">Yuk, tambahin pengingat pertama kamu</ThemedText>
-            </View>
-          )}
-        </Surface>
-
-        <Surface>
-          <SectionHeader title="Timeline konsumsi" subtitle="Catatan konsumsi 7 hari" />
-          {adherenceData.length > 0 ? (
-            /* Compact histogram so pasien dapat memantau pola kepatuhan mingguan */
-            <View style={styles.timelineRow}>
-              {adherenceData.map((day) => (
-                <View key={day.label} style={styles.timelineColumn}>
-                  <View
-                    style={[
-                      styles.timelineBarContainer,
-                      { backgroundColor: theme.colors.cardMuted },
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={theme.colors.gradient}
-                      start={{ x: 0, y: 1 }}
-                      end={{ x: 0, y: 0 }}
-                      style={[
-                        styles.timelineBar,
-                        {
-                          height: `${day.value}%`,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <ThemedText variant="caption" color="muted" style={styles.timelineLabel}>
-                    {day.label}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome6 name="chart-line" color={theme.colors.muted} size={48} />
-              <ThemedText color="muted" style={styles.emptyStateTitle}>Yah, belum ada data, nih!</ThemedText>
-              <ThemedText variant="caption" color="muted">Mulai minum obat buat lihat timeline konsumsi</ThemedText>
-            </View>
-          )}
-        </Surface>
-
-        <Surface>
-          <SectionHeader
-            title="Pengingat hari ini"
-            actionLabel={reminders.length > 3 ? "Lihat semua" : undefined}
-            onActionPress={() => reminders.length > 3 && setShowAllReminders(true)}
-          />
-          {loading ? (
-            <ReminderShimmer />
-          ) : reminders.length > 0 ? (
-            <View style={styles.remindersList}>
-              {(reminders.length > 3 ? reminders.slice(0, 3) : reminders).map((item) => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.reminderRow,
-                    {
-                      borderColor: theme.colors.border,
-                      flexDirection: "column",
-                      alignItems: "stretch",
-                      paddingVertical: 12,
-                    },
-                  ]}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <View
-                      style={[
-                        styles.reminderIcon,
-                        { backgroundColor: theme.colors.cardMuted },
-                      ]}
-                    >
-                      <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText weight="600">{item.title}</ThemedText>
-                      <ThemedText color="muted">{item.notes}</ThemedText>
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <ThemedText>{item.time}</ThemedText>
-                      <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-                    <Pressable
-                      onPress={() => handleStartEdit(item)}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        backgroundColor: theme.colors.cardMuted,
-                        borderRadius: 8,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      <FontAwesome6 name="pen" size={12} color={theme.colors.textPrimary} />
-                      <ThemedText variant="caption" weight="600">Edit</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => confirmDelete(item)}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        backgroundColor: "rgba(255,107,107,0.1)",
-                        borderRadius: 8,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      <FontAwesome6 name="trash" size={12} color={theme.colors.danger} />
-                      <ThemedText variant="caption" weight="600" style={{ color: theme.colors.danger }}>Hapus</ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome6 name="clock" color={theme.colors.muted} size={48} />
-              <ThemedText color="muted" style={styles.emptyStateTitle}>Yah, belum ada data, nih!</ThemedText>
-              <ThemedText variant="caption" color="muted">Tambahin pengingat obat buat lihat jadwal harian</ThemedText>
-            </View>
-          )}
-        </Surface>
-
-        <Surface>
-          <SectionHeader title="Pemantauan keluarga" subtitle="Caregiver menerima notifikasi" />
-          {caregivers.filter((c) => c.status === "active").map((caregiver) => (
-            <View key={caregiver.id} style={styles.caregiverRow}>
-              <View style={{ flex: 1 }}>
-                <ThemedText weight="500">{caregiver.name}</ThemedText>
-                <ThemedText variant="caption" color="muted">{caregiver.role} | {caregiver.contact}</ThemedText>
-              </View>
-              <FontAwesome6 name="shield-halved" color={theme.colors.success} size={20} />
-            </View>
-          ))}
-          <View style={styles.caregiverActions}>
-            <Pressable onPress={handleViewHistory}>
-              <Surface muted padding={true} style={styles.caregiverAction}>
-                <View style={styles.actionContent}>
-                  <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
-                  <ThemedText variant="caption">Riwayat konsumsi</ThemedText>
-                </View>
-              </Surface>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Dosis Berikutnya</Text>
+            <Pressable onPress={() => setShowAddModal(true)}>
+               <FontAwesome6 name="plus" color={theme.colors.accent} size={20} />
             </Pressable>
           </View>
-        </Surface>
+          <View style={styles.cardContainer}>
+            {nextReminder ? (
+              <LinearGradient
+                colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={{ borderRadius: 16 }}
+              >
+              <View style={styles.nextDoseRow}>
+                <LinearGradient
+                  colors={theme.colors.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.pillIcon}
+                >
+                  <FontAwesome6 name="pills" color="#FFFFFF" size={24} />
+                </LinearGradient>
+                <View style={styles.nextDoseContent}>
+                    <ThemedText variant="subheading" weight="600" style={{ fontSize: 19 }}>
+                      {nextReminder.title}
+                    </ThemedText>
+                    <View style={[styles.dosageBadge, { backgroundColor: mode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)" }]}>
+                      <ThemedText weight="600" style={{ fontSize: 14, color: theme.colors.accent }}>{nextReminder.dosage}</ThemedText>
+                    </View>
+                    {nextReminder.notes ? <ThemedText variant="caption" color="muted" style={{ marginTop: 4 }}>{nextReminder.notes}</ThemedText> : null}
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <ThemedText variant="subheading" weight="600" style={{ fontSize: 19, color: theme.colors.accent }}>
+                      {nextReminder.time}
+                    </ThemedText>
+                    <ThemedText variant="caption" color="muted">
+                      hari ini
+                    </ThemedText>
+                  </View>
+                </View>
+                <LinearGradient
+                  colors={theme.colors.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.primaryButton, { margin: 16, marginTop: 8 }]}
+                >
+                  <Pressable
+                    style={{ paddingVertical: 12, alignItems: 'center', width: '100%' }}
+                    onPress={handlePressConfirmButton}
+                  >
+                    <Text style={styles.primaryButtonText}>Udah minum obat</Text>
+                  </Pressable>
+                </LinearGradient>
+              </LinearGradient>
+            ) : (
+              <LinearGradient
+                colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={{ borderRadius: 16 }}
+              >
+                <View style={styles.emptyState}>
+                  <FontAwesome6 name="calendar-plus" color={theme.colors.muted} size={48} />
+                  <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada pengingat</ThemedText>
+                  <ThemedText variant="caption" color="muted">Yuk, tambahin pengingat kamu untuk hari ini!</ThemedText>
+                </View>
+              </LinearGradient>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Timeline</Text>
+             <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>7 Hari Terakhir</Text>
+          </View>
+          <LinearGradient
+            colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.cardContainer}
+          >
+            {adherenceData.length > 0 ? (
+              <View style={styles.timelineRow}>
+                {adherenceData.map((day, index) => {
+                  const isToday = index === adherenceData.length - 1;
+                  const percentage = Math.round(day.value);
+                  return (
+                    <View key={day.label} style={styles.timelineColumn}>
+                      <View style={styles.timelineValueContainer}>
+                        <Text style={[
+                          styles.timelineValue,
+                          { 
+                            color: percentage >= 80 ? '#34C759' : percentage >= 50 ? theme.colors.accent : '#FF9500',
+                            fontFamily: "Geist-Bold",
+                          }
+                        ]}>
+                          {percentage}%
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.timelineBarContainer,
+                          { 
+                            backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7",
+                            borderWidth: isToday ? 2 : 0,
+                            borderColor: theme.colors.accent,
+                          },
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={
+                            percentage >= 80 
+                              ? ['#34C759', '#30D158']
+                              : percentage >= 50
+                              ? theme.colors.gradient
+                              : ['#FF9500', '#FFCC00']
+                          }
+                          start={{ x: 0, y: 1 }}
+                          end={{ x: 0, y: 0 }}
+                          style={[
+                            styles.timelineBar,
+                            {
+                              height: `${Math.max(day.value, 5)}%`,
+                              borderRadius: 8,
+                              shadowColor: percentage >= 80 ? '#34C759' : percentage >= 50 ? theme.colors.accent : '#FF9500',
+                              shadowOffset: { width: 0, height: 0 },
+                              shadowOpacity: 0.5,
+                              shadowRadius: 6,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <View style={[
+                        styles.timelineLabelContainer,
+                        isToday && { 
+                          backgroundColor: mode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)",
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 8,
+                        }
+                      ]}>
+                        <ThemedText 
+                          variant="caption" 
+                          weight={isToday ? "600" : "500"}
+                          style={[
+                            styles.timelineLabel,
+                            { color: isToday ? theme.colors.accent : theme.colors.textSecondary }
+                          ]}
+                        >
+                          {day.label}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <FontAwesome6 name="chart-line" color={theme.colors.muted} size={48} />
+                <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada data</ThemedText>
+                <ThemedText variant="caption" color="muted">Mulai minum obat buat lihat timeline</ThemedText>
+              </View>
+            )}
+          </LinearGradient>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Jadwal Obat</Text>
+            {reminders.length > 3 && (
+               <Pressable onPress={() => setShowAllReminders(true)}>
+                  <Text style={{ color: theme.colors.accent, fontSize: 17 }}>Lihat Semua</Text>
+               </Pressable>
+            )}
+          </View>
+          <LinearGradient
+            colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.cardContainer}
+          >
+            {(() => {
+              if (loading) {
+                return (
+                  <View style={{ padding: 20 }}>
+                    <ReminderShimmer />
+                  </View>
+                );
+              }
+              
+              if (reminders.length > 0) {
+                return (
+                  <View style={styles.remindersList}>
+                    {(reminders.length > 3 ? reminders.slice(0, 3) : reminders).map((item, index, arr) => (
+                      <View
+                        key={item.id}
+                        style={[
+                          styles.reminderRow,
+                          {
+                            borderBottomWidth: index === arr.length - 1 ? 0 : 0.5,
+                            borderBottomColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : '#C6C6C8',
+                          },
+                        ]}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+                          <LinearGradient
+                            colors={[
+                              mode === "dark" ? "rgba(0,122,255,0.3)" : "rgba(0,122,255,0.15)",
+                              mode === "dark" ? "rgba(0,122,255,0.1)" : "rgba(0,122,255,0.05)"
+                            ]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.reminderIcon}
+                          >
+                            <FontAwesome6 name="clock" color={theme.colors.accent} size={16} />
+                          </LinearGradient>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText weight="600" style={{ fontSize: 17 }}>{item.title}</ThemedText>
+                            {item.notes ? <ThemedText color="muted" style={{ fontSize: 13 }}>{item.notes}</ThemedText> : null}
+                            {item.repeatDays && item.repeatDays.length < 7 && (
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                {item.repeatDays.sort((a: number, b: number) => a - b).map((day: number) => (
+                                  <View key={day} style={{ backgroundColor: mode === "dark" ? "rgba(0,122,255,0.2)" : "rgba(0,122,255,0.1)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                    <ThemedText style={{ fontSize: 11, color: theme.colors.accent }}>
+                                      {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][day]}
+                                    </ThemedText>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                          <View style={{ alignItems: "flex-end" }}>
+                            <ThemedText style={{ fontSize: 17, color: theme.colors.textPrimary }}>{item.time}</ThemedText>
+                            <Text style={[styles.statusChip, styles[item.status as keyof typeof styles]]}>{item.status}</Text>
+                          </View>
+                        </View>
+
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                          <Pressable
+                            onPress={() => handleStartEdit(item)}
+                            style={{
+                              padding: 8,
+                              backgroundColor: mode === "dark" ? "#2C2C2E" : "#F2F2F7",
+                              borderRadius: 8,
+                            }}
+                          >
+                            <FontAwesome6 name="pen" size={12} color={theme.colors.accent} />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => confirmDelete(item)}
+                            style={{
+                              padding: 8,
+                              backgroundColor: "rgba(255,59,48,0.1)",
+                              borderRadius: 8,
+                            }}
+                          >
+                            <FontAwesome6 name="trash" size={12} color="#FF3B30" />
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                );
+              }
+              
+              return (
+                <View style={styles.emptyState}>
+                  <FontAwesome6 name="clock" color={theme.colors.muted} size={48} />
+                  <ThemedText color="muted" style={styles.emptyStateTitle}>Belum ada jadwal</ThemedText>
+                  <ThemedText variant="caption" color="muted">Tambahin pengingat obat buat lihat jadwal</ThemedText>
+                </View>
+              );
+            })()}
+          </LinearGradient>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Caregiver</Text>
+          </View>
+          <LinearGradient
+            colors={mode === "dark" ? ["#1C1C1E", "#2C2C2E"] : ["#FFFFFF", "#F8F9FA"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.cardContainer}
+          >
+            {(() => {
+              // Get connected caregivers from the array field
+              const connectedCaregivers = caregivers.length > 0 ? caregivers : [];
+              
+              if (connectedCaregivers.length > 0) {
+                return connectedCaregivers.map((caregiver: any) => (
+                  <View key={caregiver.id || caregiver['0']} style={[styles.caregiverRow, { padding: 16, marginBottom: 0, shadowOpacity: 0 }]}>
+                    <LinearGradient
+                      colors={theme.colors.gradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}
+                    >
+                      <FontAwesome6 name="user-nurse" color="#FFFFFF" size={16} />
+                    </LinearGradient>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText weight="600" style={{ fontSize: 17 }}>{caregiver.name || caregiver.caregiverName || 'Caregiver'}</ThemedText>
+                      <ThemedText variant="caption" color="muted">{caregiver.email || caregiver.caregiverEmail || 'Terhubung'}</ThemedText>
+                    </View>
+                    <View style={{ backgroundColor: 'rgba(52,199,89,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#34C759' }} />
+                      <ThemedText variant="caption" weight="600" style={{ color: '#34C759', fontSize: 12 }}>Aktif</ThemedText>
+                    </View>
+                  </View>
+                ));
+              }
+              
+              return (
+                <View style={{ paddingVertical: 16 }}>
+                  <ThemedText color="muted" style={{ textAlign: 'center' }}>Belum ada caregiver terhubung</ThemedText>
+                </View>
+              );
+            })()}
+            <View style={[styles.caregiverActions, { borderTopColor: mode === "dark" ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
+              <Pressable onPress={handleViewHistory} style={{ flex: 1 }}>
+                <View style={[styles.caregiverAction, { backgroundColor: 'transparent' }]}>
+                  <FontAwesome6 name="chart-line" color={theme.colors.accent} size={16} />
+                  <ThemedText variant="caption" weight="600" style={{ color: theme.colors.accent, fontSize: 15 }}>Riwayat konsumsi</ThemedText>
+                </View>
+              </Pressable>
+            </View>
+          </LinearGradient>
+        </View>
       </ScrollView>
 
       <ConfirmMedicationModal
@@ -1036,151 +1343,300 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
   },
-  hero: {
-    padding: 24,
-    borderRadius: 24,
-    minHeight: 160,
-    justifyContent: "center",
-    alignItems: "flex-start",
-    gap: 16,
-  },
-  heroHeader: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    width: "100%",
+    alignItems: "flex-end",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    paddingTop: 8,
   },
-  heroTitle: {
-    color: "white",
+  headerTitle: {
+    fontSize: 34,
+    letterSpacing: 0.3,
+    fontFamily: "Geist-Bold",
   },
-  heroSubtitle: {
-    color: "rgba(255,255,255,0.95)",
-    fontSize: 16,
-    lineHeight: 24,
+  headerDate: {
+    fontSize: 13,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    fontFamily: "Geist-SemiBold",
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E5E5EA",
+  },
+  summaryCard: {
+    marginHorizontal: 20,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  gradientIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#007AFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  progressContainer: {
+    gap: 16,
+  },
+  progressBarContainer: {
+    marginTop: 4,
+  },
+  progressBarBackground: {
+    height: 14,
+    borderRadius: 7,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: 14,
+    borderRadius: 7,
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  summaryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    marginBottom: 4,
+    fontFamily: "Geist-SemiBold",
+  },
+  summarySubtitle: {
+    fontSize: 14,
     fontFamily: "Geist",
   },
-  heroTags: {
+  progressRow: {
     flexDirection: "row",
-    gap: 12,
-    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 0,
+  },
+  percentageText: {
+    fontSize: 44,
+    letterSpacing: -1.5,
+    lineHeight: 52,
+    fontFamily: "Geist-Bold",
+  },
+  percentageLabel: {
+    fontSize: 15,
+    fontFamily: "Geist-SemiBold",
+  },
+  percentageSubtext: {
+    fontSize: 13,
+    marginTop: 2,
+    fontFamily: "Geist",
+  },
+  statsRow: {
+    flexDirection: "row",
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.05)",
+  },
+  statItem: {
+    flex: 1,
+    gap: 6,
+    alignItems: 'flex-start',
+  },
+  statValue: {
+    fontSize: 28,
+    fontFamily: "Geist-Bold",
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 13,
+    fontFamily: "Geist-Medium",
+    lineHeight: 16,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sectionTitle: {
+    fontSize: 22,
+    letterSpacing: 0.3,
+    fontFamily: "Geist-Bold",
+  },
+  sectionSubtitle: {
+    fontSize: 15,
+    fontFamily: "Geist-Medium",
+  },
+  cardContainer: {
+    marginHorizontal: 20,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  dosageBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 6,
   },
   nextDoseRow: {
     flexDirection: "row",
     gap: 16,
     alignItems: "center",
-    marginBottom: 16,
+    padding: 16,
   },
   nextDoseContent: {
     flex: 1,
-  },
-  nextDoseTime: {
-    alignItems: "flex-end",
+    gap: 4,
   },
   pillIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
   },
   emptyState: {
     alignItems: "center",
-    paddingVertical: 32,
+    paddingVertical: 40,
+    gap: 12,
   },
   emptyStateTitle: {
-    marginTop: 16,
+    marginTop: 8,
+    fontSize: 17,
+    fontFamily: "Geist-SemiBold",
   },
   primaryButton: {
-    backgroundColor: "#0F172A",
-    paddingVertical: 14,
-    borderRadius: 16,
+    margin: 16,
+    marginTop: 0,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: "center",
   },
   primaryButtonText: {
     color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 15,
+    fontSize: 17,
+    fontFamily: "Geist-SemiBold",
   },
   timelineRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 10,
+    padding: 20,
+    paddingBottom: 16,
   },
   timelineColumn: {
     alignItems: "center",
     flex: 1,
+    gap: 10,
+  },
+  timelineValueContainer: {
+    minHeight: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  timelineValue: {
+    fontSize: 13,
+    fontFamily: "Geist-Bold",
   },
   timelineBarContainer: {
     width: "100%",
-    height: 80,
-    borderRadius: 12,
+    height: 120,
+    borderRadius: 10,
     overflow: "hidden",
-    backgroundColor: "rgba(226,232,240,0.4)",
+    justifyContent: "flex-end",
   },
   timelineBar: {
-    borderRadius: 12,
+    borderRadius: 8,
     width: "100%",
   },
+  timelineLabelContainer: {
+    minHeight: 28,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   timelineLabel: {
-    marginTop: 8,
+    fontSize: 12,
+    textAlign: "center",
+    fontFamily: "Geist-Medium",
   },
   remindersList: {
-    gap: 14,
+    gap: 0,
   },
   reminderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    gap: 12,
-    borderBottomWidth: 0.5,
+    padding: 16,
+    gap: 16,
   },
   reminderIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(30,143,225,0.08)",
   },
   statusChip: {
-    marginTop: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: "hidden",
     textTransform: "capitalize",
-    fontWeight: "500",
-    fontSize: 11,
-    fontFamily: "Geist",
+    fontSize: 12,
+    fontFamily: "Geist-SemiBold",
   },
   scheduled: {
-    backgroundColor: "rgba(30,143,225,0.15)",
-    color: "#3DA5F5",
+    backgroundColor: "rgba(0,122,255,0.1)",
+    color: "#007AFF",
   },
   taken: {
-    backgroundColor: "rgba(12,186,135,0.15)",
-    color: "#10D99D",
+    backgroundColor: "rgba(52,199,89,0.1)",
+    color: "#34C759",
   },
   missed: {
-    backgroundColor: "rgba(255,107,107,0.15)",
-    color: "#FF8585",
+    backgroundColor: "rgba(255,59,48,0.1)",
+    color: "#FF3B30",
   },
   caregiverRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
-    gap: 12,
+    padding: 16,
+    gap: 16,
   },
   caregiverActions: {
     flexDirection: "row",
-    gap: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(0,0,0,0.1)",
   },
   caregiverAction: {
     flex: 1,
-    maxWidth: 200,
-  },
-  actionContent: {
-    flexDirection: "row",
+    padding: 16,
     alignItems: "center",
-    gap: 12,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
 });

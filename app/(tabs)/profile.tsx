@@ -1,4 +1,5 @@
 import { FontAwesome6 } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -6,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { GradientChip, Surface, ThemedText } from "../../src/components/ui";
+import { Surface, ThemedText } from "../../src/components/ui";
 import { auth, db } from "../../src/config/firebase";
 import { getConnectedPatients, type ConnectedUser } from "../../src/services/caregiver";
 import { calculateAdherence, getReminders } from "../../src/services/storage";
@@ -75,43 +76,87 @@ export default function ProfileScreen() {
           headerTitle: "Profil",
           headerStyle: { backgroundColor: theme.colors.background },
           headerShadowVisible: false,
-          headerTitleStyle: { color: theme.colors.textPrimary, fontWeight: "700", fontFamily: theme.typography.fontFamily, fontSize: 16 },
+          headerTitleStyle: { 
+            color: theme.colors.textPrimary, 
+            fontWeight: "700", 
+            fontFamily: theme.typography.fontFamily, 
+            fontSize: 34
+          },
+          headerTitleAlign: "left",
+          headerLeft: () => null,
           headerRight: () => (
-            <Pressable onPress={() => router.push("/settings" as const)} hitSlop={12} style={{ marginRight: 15 }}>
-              <FontAwesome6 name="gear" color={theme.colors.textPrimary} size={18} />
+            <Pressable 
+              onPress={() => router.push("/settings" as const)} 
+              hitSlop={16}
+              style={{ marginRight: 24 }}
+            >
+              <LinearGradient
+                colors={["rgba(0,122,255,0.2)", "rgba(0,122,255,0.1)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center" }}
+              >
+                <FontAwesome6 name="gear" color={theme.colors.accent} size={20} />
+              </LinearGradient>
             </Pressable>
           ),
         }}
       />
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: theme.spacing.md }}>
-        <Surface>
+        <LinearGradient
+          colors={theme.colors.gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.profileHeader}
+        >
           {loading ? (
-            <ActivityIndicator />
+            <ActivityIndicator color="#FFFFFF" />
           ) : !userProfile ? (
             <View style={{ padding: 16 }}>
-              <ThemedText variant="subheading" weight="600">Belum masuk</ThemedText>
-              <ThemedText variant="body" color="muted" style={{ marginTop: 8 }}>Silakan masuk untuk melihat profil Anda.</ThemedText>
-              <Pressable onPress={() => router.push("/login" as any)} style={{ marginTop: 12 }}>
-                <ThemedText color="primary" weight="600">Ke Halaman Login</ThemedText>
+              <ThemedText variant="subheading" weight="600" style={{ color: "#FFFFFF" }}>Belum masuk</ThemedText>
+              <ThemedText variant="body" style={{ marginTop: 8, color: "rgba(255,255,255,0.8)" }}>Silakan masuk untuk melihat profil Anda.</ThemedText>
+              <Pressable 
+                onPress={() => router.push("/login" as any)} 
+                style={{ marginTop: 16, backgroundColor: "rgba(255,255,255,0.2)", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, alignSelf: "flex-start" }}
+              >
+                <ThemedText weight="600" style={{ color: "#FFFFFF" }}>Ke Halaman Login</ThemedText>
               </Pressable>
             </View>
           ) : (
-            <View style={styles.userRow}>
-              <View style={[styles.avatar, { backgroundColor: theme.colors.cardMuted }]}>
-                <FontAwesome6 name="user" color={theme.colors.accent} size={24} />
+            <View style={styles.userSection}>
+              <View style={styles.avatarContainer}>
+                <LinearGradient
+                  colors={["rgba(255,255,255,0.3)", "rgba(255,255,255,0.1)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatar}
+                >
+                  <FontAwesome6 name={userProfile.role === "caregiver" ? "user-nurse" : "user"} color="#FFFFFF" size={32} />
+                </LinearGradient>
               </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText variant="subheading" weight="600">
+              <View style={styles.userInfo}>
+                <ThemedText variant="title" weight="600" style={{ color: "#FFFFFF", fontSize: 24 }}>
                   {userProfile.name}
                 </ThemedText>
-                <ThemedText variant="caption" color="muted">{userProfile.program ?? userProfile.email}</ThemedText>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                <GradientChip label={userProfile.role === "caregiver" ? "Caregiver" : "Pasien"} />
+                <ThemedText variant="body" style={{ color: "rgba(255,255,255,0.85)", marginTop: 4 }}>
+                  {userProfile.program ?? userProfile.email}
+                </ThemedText>
+                <View style={{ marginTop: 12 }}>
+                  <View style={styles.roleBadge}>
+                    <FontAwesome6 
+                      name={userProfile.role === "caregiver" ? "user-nurse" : "heart-pulse"} 
+                      color="#FFFFFF" 
+                      size={12} 
+                    />
+                    <ThemedText weight="600" style={{ color: "#FFFFFF", fontSize: 14 }}>
+                      {userProfile.role === "caregiver" ? "Caregiver" : "Pasien"}
+                    </ThemedText>
+                  </View>
+                </View>
               </View>
             </View>
           )}
-        </Surface>
+        </LinearGradient>
 
         {!loading && userProfile && (
           <Surface>
@@ -125,13 +170,32 @@ export default function ProfileScreen() {
                 {connectedPatients.length > 0 ? (
                   <View style={{ gap: 12 }}>
                     {connectedPatients.map((patient) => (
-                      <View key={patient.uid} style={{ padding: 12, backgroundColor: theme.colors.cardMuted, borderRadius: 12 }}>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                          <ThemedText weight="600">{patient.name}</ThemedText>
-                          <GradientChip label="Aktif" />
+                      <LinearGradient
+                        key={patient.uid}
+                        colors={["rgba(0,122,255,0.1)", "rgba(0,122,255,0.05)"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.patientCard}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                          <LinearGradient
+                            colors={theme.colors.gradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.patientAvatar}
+                          >
+                            <FontAwesome6 name="user" color="#FFFFFF" size={16} />
+                          </LinearGradient>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText weight="600" style={{ fontSize: 16 }}>{patient.name}</ThemedText>
+                            <ThemedText variant="caption" color="muted" style={{ marginTop: 2 }}>{patient.email}</ThemedText>
+                          </View>
+                          <View style={styles.activeIndicator}>
+                            <View style={styles.activeDot} />
+                            <ThemedText variant="caption" weight="600" style={{ color: "#34C759", fontSize: 12 }}>Aktif</ThemedText>
+                          </View>
                         </View>
-                        <ThemedText variant="caption" color="muted">{patient.email}</ThemedText>
-                      </View>
+                      </LinearGradient>
                     ))}
                   </View>
                 ) : (
@@ -142,8 +206,33 @@ export default function ProfileScreen() {
               </View>
             ) : (
               <View style={styles.statRow}>
-                <StatItem label="Konsistensi" value={`${adherence}%`} caption="7 hari terakhir" />
-                <StatItem label="Obat aktif" value={`${activeMedsCount}`} caption="Terjadwal" />
+                <LinearGradient
+                  colors={["rgba(0,122,255,0.15)", "rgba(0,122,255,0.05)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statCard}
+                >
+                  <View style={[styles.statIconContainer, { backgroundColor: "rgba(0,122,255,0.2)" }]}>
+                    <FontAwesome6 name="chart-line" color={theme.colors.accent} size={18} />
+                  </View>
+                  <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>Konsistensi</ThemedText>
+                  <ThemedText variant="title" weight="600" style={{ fontSize: 28, marginTop: 4 }}>{adherence}%</ThemedText>
+                  <ThemedText variant="caption" color="muted">7 hari terakhir</ThemedText>
+                </LinearGradient>
+                
+                <LinearGradient
+                  colors={["rgba(52,199,89,0.15)", "rgba(52,199,89,0.05)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statCard}
+                >
+                  <View style={[styles.statIconContainer, { backgroundColor: "rgba(52,199,89,0.2)" }]}>
+                    <FontAwesome6 name="pills" color="#34C759" size={18} />
+                  </View>
+                  <ThemedText variant="caption" color="muted" style={{ marginTop: 8 }}>Obat aktif</ThemedText>
+                  <ThemedText variant="title" weight="600" style={{ fontSize: 28, marginTop: 4 }}>{activeMedsCount}</ThemedText>
+                  <ThemedText variant="caption" color="muted">Terjadwal</ThemedText>
+                </LinearGradient>
               </View>
             )}
           </Surface>
@@ -153,38 +242,81 @@ export default function ProfileScreen() {
   );
 }
 
-type StatProps = {
-  label: string;
-  value: string;
-  caption: string;
-};
-
-function StatItem({ label, value, caption }: StatProps) {
-  return (
-    <View style={{ flex: 1 }}>
-      <ThemedText variant="caption" color="muted">{label}</ThemedText>
-      <ThemedText variant="subheading" weight="600">{value}</ThemedText>
-      <ThemedText variant="caption" color="muted">{caption}</ThemedText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  userRow: {
-    flexDirection: "row",
+  profileHeader: {
+    borderRadius: 20,
+    padding: 24,
+    overflow: "hidden",
+  },
+  userSection: {
+    gap: 16,
+  },
+  avatarContainer: {
     alignItems: "center",
-    gap: 12,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  userInfo: {
+    alignItems: "center",
+  },
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   statRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  patientCard: {
+    padding: 16,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  patientAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  activeIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(52,199,89,0.15)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#34C759",
   },
 });
