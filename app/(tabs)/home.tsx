@@ -17,36 +17,36 @@ import { MedicationHistoryModal } from "../../src/components/MedicationHistoryMo
 import RemindersModal from "../../src/components/RemindersModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-  ThemedText
+    ThemedText
 } from "../../src/components/ui";
 import { useLanguage } from "../../src/i18n";
 import {
-  getConnectedPatients,
-  getPendingRequests,
-  respondToConnectionRequest,
-  sendConnectionRequest,
-  type ConnectedUser,
-  type ConnectionRequest,
+    getConnectedPatients,
+    getPendingRequests,
+    respondToConnectionRequest,
+    sendConnectionRequest,
+    type ConnectedUser,
+    type ConnectionRequest,
 } from "../../src/services/caregiver";
 import {
-  addNotificationResponseListener,
-  cancelMedicationNotifications,
-  dedupeMedicationNotifications,
-  registerForPushNotifications,
-  scheduleReminderNotification,
-  sendCaregiverNotification,
+    addNotificationResponseListener,
+    cancelMedicationNotifications,
+    dedupeMedicationNotifications,
+    registerForPushNotifications,
+    scheduleReminderNotification,
+    sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
-  calculateAdherence,
-  clearMedicationHistory,
-  createReminder as createReminderInStore,
-  deleteReminder as deleteReminderInStore,
-  getDailyAdherence,
-  getMedicationHistory,
-  getReminders as getRemindersFromStore,
-  saveMedicationRecord,
-  updateReminder as updateReminderInStore,
-  type MedicationRecord
+    calculateAdherence,
+    clearMedicationHistory,
+    createReminder as createReminderInStore,
+    deleteReminder as deleteReminderInStore,
+    getDailyAdherence,
+    getMedicationHistory,
+    getReminders as getRemindersFromStore,
+    saveMedicationRecord,
+    updateReminder as updateReminderInStore,
+    type MedicationRecord
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
@@ -747,7 +747,7 @@ export default function HomeScreen() {
               </Text>
               <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>{t("summary")}</Text>
             </View>
-            <Pressable style={[styles.profileButton, { backgroundColor: theme.colors.cardMuted }]}>
+            <Pressable style={[styles.profileButton, { backgroundColor: theme.colors.cardMuted }]} onPress={() => router.push("/(tabs)/profile")}>
               <FontAwesome6 name="user-nurse" color={theme.colors.accent} size={20} />
             </Pressable>
           </View>
@@ -844,7 +844,7 @@ export default function HomeScreen() {
             </Text>
             <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>{t("summary")}</Text>
           </View>
-          <Pressable style={[styles.profileButton, { backgroundColor: theme.colors.cardMuted }]}>
+          <Pressable style={[styles.profileButton, { backgroundColor: theme.colors.cardMuted }]} onPress={() => router.push("/(tabs)/profile")}>
             <FontAwesome6 name="user" color={theme.colors.accent} size={20} />
           </Pressable>
         </View>

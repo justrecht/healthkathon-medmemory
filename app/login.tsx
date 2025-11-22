@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CustomAlert } from "../src/components/CustomAlert";
 import { ThemedText } from "../src/components/ui";
 import { useLanguage } from "../src/i18n";
 import { signInWithEmail, signUpWithEmail } from "../src/services/auth";
@@ -95,6 +96,12 @@ export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  // Feedback modal state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState<string | undefined>(undefined);
+  const [alertMessage, setAlertMessage] = useState<string | undefined>(undefined);
+  const [alertIcon, setAlertIcon] = useState<keyof typeof FontAwesome6.glyphMap | undefined>(undefined);
+  const [alertIconColor, setAlertIconColor] = useState<string | undefined>(undefined);
 
   const handleAuth = async () => {
     if (!email || !password || (isRegistering && !name)) return;
@@ -117,9 +124,25 @@ export default function LoginScreen() {
     setAuthLoading(false);
 
     if (result.error) {
-      alert(result.error.message || result.error);
+      const message = result.error.message || String(result.error) || t("authUnknownError");
+      // show feedback modal for error
+      setAlertTitle(t("loginFailed") || "Login gagal");
+      setAlertMessage(message);
+      setAlertIcon("triangle-exclamation");
+      setAlertIconColor("#FF8585");
+      setAlertVisible(true);
     } else if (result.user) {
-      router.replace("/(tabs)/home");
+      // show feedback modal for success
+      setAlertTitle(t("loginSuccess") || "Login berhasil");
+      setAlertMessage(t("welcomeBack") || "Selamat datang kembali");
+      setAlertIcon("circle-check");
+      setAlertIconColor("#10D99D");
+      setAlertVisible(true);
+      // navigate after small delay to allow user to see feedback
+      setTimeout(() => {
+        setAlertVisible(false);
+        router.replace("/(tabs)/home");
+      }, 900);
     }
   };
 
@@ -175,6 +198,14 @@ export default function LoginScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <CustomAlert
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        icon={alertIcon}
+        iconColor={alertIconColor}
+        onClose={() => setAlertVisible(false)}
+      />
     </SafeAreaView>
   );
 }
