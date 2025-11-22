@@ -1,4 +1,3 @@
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import {
@@ -13,7 +12,6 @@ import {
 // Configure notification behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -36,6 +34,8 @@ const NOTIFICATION_CHANNEL = {
 export class NotificationService {
   private static instance: NotificationService;
   private isInitialized = false;
+  private notificationReceivedSubscription: any = null;
+  private notificationResponseSubscription: any = null;
 
   private constructor() {}
 
@@ -62,11 +62,20 @@ export class NotificationService {
       await this.createNotificationChannel();
     }
 
-    // Set up notification received listener
-    Notifications.addNotificationReceivedListener(async (notification) => {
+    // Remove any existing listeners to prevent duplicates
+    if (this.notificationReceivedSubscription) {
+      this.notificationReceivedSubscription.remove();
+    }
+    if (this.notificationResponseSubscription) {
+      this.notificationResponseSubscription.remove();
+    }
+
+    // Set up notification received listener (only once)
+    this.notificationReceivedSubscription = Notifications.addNotificationReceivedListener(async (notification) => {
       console.log('Notification Received:', notification);
       
-      const { type, reminderId, medicationId } = notification.request.content.data;
+      const data = notification.request.content.data as { type?: string; reminderId?: string; medicationId?: string; isWeekly?: boolean; dayOfWeek?: number };
+      const { type, reminderId, medicationId, isWeekly, dayOfWeek } = data;
       
       // If this is an on-time notification, add to pending medications
       if (type === 'ontime') {
@@ -89,10 +98,60 @@ export class NotificationService {
           console.error('Error adding to pending medications:', error);
         }
       }
+      
+      // Reschedule weekly notifications for next week (Android workaround for calendar triggers)
+      if (isWeekly && dayOfWeek !== undefined) {
+        try {
+          // Calculate next occurrence: same day next week at the same time
+          const now = new Date();
+          const currentDayOfWeek = now.getDay();
+          let daysUntilNextOccurrence = dayOfWeek - currentDayOfWeek;
+          
+          // If it's the same day or already passed this week, schedule for next week
+          if (daysUntilNextOccurrence <= 0) {
+            daysUntilNextOccurrence += 7;
+          }
+          
+          const nextWeekDate = new Date(now);
+          nextWeekDate.setDate(now.getDate() + daysUntilNextOccurrence);
+          
+          // Preserve the original notification time
+          const triggerDate = notification.request.trigger as any;
+          if (triggerDate && triggerDate.date) {
+            const originalDate = new Date(triggerDate.date);
+            nextWeekDate.setHours(originalDate.getHours(), originalDate.getMinutes(), 0, 0);
+          }
+          
+          console.log(`🔄 Rescheduling weekly notification for next week: ${notification.request.identifier}`);
+          console.log(`   Next fire date: ${nextWeekDate.toLocaleString()}`);
+          
+          const trigger: Notifications.DateTriggerInput = {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: nextWeekDate,
+          };
+          
+          await Notifications.scheduleNotificationAsync({
+            identifier: notification.request.identifier,
+            content: {
+              title: notification.request.content.title || '',
+              body: notification.request.content.body || '',
+              data: notification.request.content.data,
+              sound: notification.request.content.sound as any,
+              priority: Notifications.AndroidNotificationPriority.MAX,
+              ...(Platform.OS === 'android' && {
+                channelId: NOTIFICATION_CHANNEL.channelId,
+              }),
+            },
+            trigger,
+          });
+        } catch (error) {
+          console.error('Error rescheduling weekly notification:', error);
+        }
+      }
     });
 
-    // Set up notification response listener (when user taps notification)
-    Notifications.addNotificationResponseReceivedListener((response) => {
+    // Set up notification response listener (when user taps notification) - only once
+    this.notificationResponseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
       console.log('Notification tapped:', response);
       this.handleNotificationOpen(response.notification);
     });
@@ -123,7 +182,8 @@ export class NotificationService {
    * Handle notification open event
    */
   private handleNotificationOpen(notification: Notifications.Notification) {
-    const { reminderId, medicationId } = notification.request.content.data;
+    const data = notification.request.content.data as { reminderId?: string; medicationId?: string };
+    const { reminderId, medicationId } = data;
     
     if (reminderId) {
       console.log(`Opening reminder: ${reminderId}`);
@@ -137,41 +197,43 @@ export class NotificationService {
    */
   async scheduleAllNotifications(userId?: string) {
     try {
-      console.log('Scheduling all notifications...');
+      console.log('📅 Scheduling all notifications...');
       
       // Clear existing notifications
       await this.cancelAllNotifications();
 
-      // Get UI settings to check if notifications are enabled
+      // Get UI settings to check if "before schedule" notifications are enabled
       const settings = await getUISettings(userId);
-      if (!settings.beforeSchedule) {
-        console.log('Notifications disabled in settings');
-        return;
-      }
+      console.log('⚙️ Notification settings:', settings);
 
       // Get all reminders
       const reminders = await getReminders(userId);
-      console.log(`Found ${reminders.length} reminders to schedule`);
+      console.log(`📋 Found ${reminders.length} total reminders`);
 
       const notificationMap = new Map<string, string[]>();
+      let scheduledCount = 0;
 
       for (const reminder of reminders) {
         if (reminder.status !== 'scheduled') {
+          console.log(`⏭️ Skipping reminder "${reminder.title}" (status: ${reminder.status})`);
           continue;
         }
 
+        console.log(`📝 Scheduling reminder: "${reminder.title}" at ${reminder.time}`);
+        // Pass settings.beforeSchedule to enable/disable the 30-min-before notification
         const notificationIds = await this.scheduleReminderNotifications(reminder, settings.beforeSchedule);
         if (notificationIds.length > 0) {
           notificationMap.set(reminder.id, notificationIds);
+          scheduledCount++;
         }
       }
 
       // Save scheduled notification IDs
       await saveScheduledNotifications(notificationMap);
       
-      console.log(`Scheduled notifications for ${notificationMap.size} reminders`);
+      console.log(`✅ Successfully scheduled notifications for ${scheduledCount} reminders (${notificationMap.size} total notification sets)`);
     } catch (error) {
-      console.error('Error scheduling all notifications:', error);
+      console.error('❌ Error scheduling all notifications:', error);
     }
   }
 
@@ -189,65 +251,152 @@ export class NotificationService {
         ? reminder.repeatDays 
         : [0, 1, 2, 3, 4, 5, 6];
 
+      const now = new Date();
+
       for (const dayOfWeek of repeatDays) {
         // Calculate next occurrence of this day
         const fireDate = this.getNextDateForDayAndTime(dayOfWeek, hours, minutes);
-
+        
+        // Create time checks for TODAY only (not next week)
+        const todayScheduledTime = new Date();
+        todayScheduledTime.setHours(hours, minutes, 0, 0);
+        
+        const todayLateTime = new Date(todayScheduledTime);
+        todayLateTime.setMinutes(todayLateTime.getMinutes() + 10);
+        
+        const todayBeforeTime = new Date(todayScheduledTime);
+        todayBeforeTime.setMinutes(todayBeforeTime.getMinutes() - 30);
+        
+        // Check if today is the scheduled day
+        const isToday = now.getDay() === dayOfWeek;
+        
         // Schedule main notification (on-time notification)
-        const mainNotificationId = `${reminder.id}_${dayOfWeek}`;
-        await this.scheduleLocalNotification({
-          id: mainNotificationId,
-          title: '💊 ' + reminder.title,
-          body: `Time to take ${reminder.dosage}${reminder.notes ? ` - ${reminder.notes}` : ''}`,
-          fireDate,
-          payload: {
-            reminderId: reminder.id,
-            medicationId: reminder.id,
-            type: 'ontime'
-          },
-          repeatType: 'week' // Repeat weekly
-        });
-        notificationIds.push(mainNotificationId);
+        if (isToday && now < todayScheduledTime) {
+          // Today, but time hasn't passed - schedule one-time notification for today
+          console.log(`📍 Scheduling one-time notification for TODAY at ${hours}:${minutes}`);
+          const mainNotificationIdToday = `${reminder.id}_${dayOfWeek}_today`;
+          await this.scheduleLocalNotification({
+            id: mainNotificationIdToday,
+            title: '💊 ' + reminder.title,
+            body: `Time to take ${reminder.dosage}${reminder.notes ? ` - ${reminder.notes}` : ''}`,
+            fireDate: todayScheduledTime,
+            payload: {
+              reminderId: reminder.id,
+              medicationId: reminder.id,
+              type: 'ontime'
+            }
+            // No repeatType - will use date trigger for one-time notification
+          });
+          notificationIds.push(mainNotificationIdToday);
+        } else if (isToday && now >= todayScheduledTime) {
+          console.log(`⏭️ Skipping on-time notification for ${reminder.title} on ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]} - time already passed`);
+        } else {
+          // Different day - use repeating weekly trigger
+          const mainNotificationId = `${reminder.id}_${dayOfWeek}`;
+          await this.scheduleLocalNotification({
+            id: mainNotificationId,
+            title: '💊 ' + reminder.title,
+            body: `Time to take ${reminder.dosage}${reminder.notes ? ` - ${reminder.notes}` : ''}`,
+            fireDate,
+            payload: {
+              reminderId: reminder.id,
+              medicationId: reminder.id,
+              type: 'ontime',
+              isWeekly: true,
+              dayOfWeek: dayOfWeek
+            },
+            repeatType: 'week' // Repeat weekly
+          });
+          notificationIds.push(mainNotificationId);
+        }
 
         // Schedule "before" notification (30 minutes before)
         if (enableBeforeNotification) {
           const beforeFireDate = new Date(fireDate);
           beforeFireDate.setMinutes(beforeFireDate.getMinutes() - 30);
           
-          const beforeNotificationId = `${reminder.id}_${dayOfWeek}_before`;
-          await this.scheduleLocalNotification({
-            id: beforeNotificationId,
-            title: '⏰ Upcoming Medication',
-            body: `${reminder.title} in 30 minutes (${reminder.dosage})`,
-            fireDate: beforeFireDate,
-            payload: {
-              reminderId: reminder.id,
-              medicationId: reminder.id,
-              type: 'before'
-            },
-            repeatType: 'week'
-          });
-          notificationIds.push(beforeNotificationId);
+          if (isToday && now < todayBeforeTime) {
+            // Today, but before time hasn't passed - schedule one-time notification for today
+            console.log(`📍 Scheduling one-time BEFORE notification for TODAY at ${todayBeforeTime.getHours()}:${todayBeforeTime.getMinutes()}`);
+            const beforeNotificationIdToday = `${reminder.id}_${dayOfWeek}_before_today`;
+            await this.scheduleLocalNotification({
+              id: beforeNotificationIdToday,
+              title: '⏰ Upcoming Medication',
+              body: `${reminder.title} in 30 minutes (${reminder.dosage})`,
+              fireDate: todayBeforeTime,
+              payload: {
+                reminderId: reminder.id,
+                medicationId: reminder.id,
+                type: 'before'
+              }
+              // No repeatType - will use date trigger for one-time notification
+            });
+            notificationIds.push(beforeNotificationIdToday);
+          } else if (isToday && now >= todayBeforeTime) {
+            console.log(`⏭️ Skipping before notification for ${reminder.title} on ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]} - time already passed`);
+          } else {
+            // Different day - use repeating weekly trigger
+            const beforeNotificationId = `${reminder.id}_${dayOfWeek}_before`;
+            await this.scheduleLocalNotification({
+              id: beforeNotificationId,
+              title: '⏰ Upcoming Medication',
+              body: `${reminder.title} in 30 minutes (${reminder.dosage})`,
+              fireDate: beforeFireDate,
+              payload: {
+                reminderId: reminder.id,
+                medicationId: reminder.id,
+                type: 'before',
+                isWeekly: true,
+                dayOfWeek: dayOfWeek
+              },
+              repeatType: 'week'
+            });
+            notificationIds.push(beforeNotificationId);
+          }
         }
 
         // Schedule "late" notification (10 minutes after scheduled time)
-        const lateFireDate = new Date(fireDate);
-        lateFireDate.setMinutes(lateFireDate.getMinutes() + 10);
-        
-        const lateNotificationId = `${reminder.id}_${dayOfWeek}_late`;
-        await this.scheduleLocalNotification({
-          id: lateNotificationId,
-          title: '⚠️ Medication Reminder',
-          body: `Did you take your ${reminder.title}? (${reminder.dosage})`,
-          fireDate: lateFireDate,
-          payload: {
-            reminderId: reminder.id,
-            medicationId: reminder.id,
-            type: 'late'
-          },
-          repeatType: 'week'
-        });
-        notificationIds.push(lateNotificationId);
+        if (isToday && now < todayLateTime) {
+          // Today, but late time hasn't passed - schedule one-time notification for today
+          console.log(`📍 Scheduling one-time LATE notification for TODAY at ${todayLateTime.getHours()}:${todayLateTime.getMinutes()}`);
+          const lateNotificationIdToday = `${reminder.id}_${dayOfWeek}_late_today`;
+          await this.scheduleLocalNotification({
+            id: lateNotificationIdToday,
+            title: '⚠️ Medication Reminder',
+            body: `Did you take your ${reminder.title}? (${reminder.dosage})`,
+            fireDate: todayLateTime,
+            payload: {
+              reminderId: reminder.id,
+              medicationId: reminder.id,
+              type: 'late'
+            }
+            // No repeatType - will use date trigger for one-time notification
+          });
+          notificationIds.push(lateNotificationIdToday);
+        } else if (isToday && now >= todayLateTime) {
+          console.log(`⏭️ Skipping late notification for ${reminder.title} on ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]} - time already passed`);
+        } else {
+          // Different day - use repeating weekly trigger
+          const lateFireDate = new Date(fireDate);
+          lateFireDate.setMinutes(lateFireDate.getMinutes() + 10);
+          
+          const lateNotificationId = `${reminder.id}_${dayOfWeek}_late`;
+          await this.scheduleLocalNotification({
+            id: lateNotificationId,
+            title: '⚠️ Medication Reminder',
+            body: `Did you take your ${reminder.title}? (${reminder.dosage})`,
+            fireDate: lateFireDate,
+            payload: {
+              reminderId: reminder.id,
+              medicationId: reminder.id,
+              type: 'late',
+              isWeekly: true,
+              dayOfWeek: dayOfWeek
+            },
+            repeatType: 'week'
+          });
+          notificationIds.push(lateNotificationId);
+        }
       }
 
       console.log(`Scheduled ${notificationIds.length} notifications for reminder: ${reminder.title}`);
@@ -263,22 +412,30 @@ export class NotificationService {
    */
   private getNextDateForDayAndTime(dayOfWeek: number, hours: number, minutes: number): Date {
     const now = new Date();
-    const targetDate = new Date(now);
-    
-    targetDate.setHours(hours, minutes, 0, 0);
     
     // Calculate days until target day
     const currentDay = now.getDay();
     let daysUntilTarget = dayOfWeek - currentDay;
     
+    // Create target date by calculating the target day first
+    const targetDate = new Date(now);
+    
     // If target day is today but time has passed, schedule for next week
-    if (daysUntilTarget === 0 && now.getTime() > targetDate.getTime()) {
+    const tempDate = new Date(now);
+    tempDate.setHours(hours, minutes, 0, 0);
+    
+    if (daysUntilTarget === 0 && now.getTime() > tempDate.getTime()) {
       daysUntilTarget = 7;
     } else if (daysUntilTarget < 0) {
       daysUntilTarget += 7;
     }
     
+    // Set the target day
     targetDate.setDate(now.getDate() + daysUntilTarget);
+    // Then set the time in local timezone
+    targetDate.setHours(hours, minutes, 0, 0);
+    
+    console.log(`📅 Calculated next occurrence: Day ${dayOfWeek}, ${hours}:${String(minutes).padStart(2, '0')} => ${targetDate.toLocaleString()}`);
     
     return targetDate;
   }
@@ -295,17 +452,15 @@ export class NotificationService {
     repeatType?: 'week' | 'day';
   }) {
     try {
-      const trigger: Notifications.NotificationTriggerInput = 
-        options.repeatType === 'week' 
-          ? {
-              weekday: options.fireDate.getDay() + 1, // expo uses 1-7, JS uses 0-6
-              hour: options.fireDate.getHours(),
-              minute: options.fireDate.getMinutes(),
-              repeats: true,
-            } as Notifications.NotificationTriggerInput
-          : options.fireDate as any;
+      // Calendar triggers are not supported on Android
+      // All notifications will use date triggers with proper format
+      // For weekly repeating, we schedule for next occurrence and handle repetition manually
+      const trigger: Notifications.DateTriggerInput = {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: options.fireDate,
+      };
 
-      await Notifications.scheduleNotificationAsync({
+      const notificationId = await Notifications.scheduleNotificationAsync({
         identifier: options.id,
         content: {
           title: options.title,
@@ -320,9 +475,14 @@ export class NotificationService {
         trigger,
       });
       
-      console.log(`Scheduled notification: ${options.title} at ${options.fireDate.toISOString()}`);
+      const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dayName = weekdayNames[options.fireDate.getDay()];
+      console.log(`✅ Scheduled notification [${notificationId}]: "${options.title}"`);
+      console.log(`   Day: ${dayName} (${options.fireDate.getDay()}) at ${options.fireDate.getHours()}:${String(options.fireDate.getMinutes()).padStart(2, '0')}`);
+      console.log(`   Repeats: ${options.repeatType === 'week' ? 'weekly' : 'once'}`);
     } catch (error) {
-      console.error('Error scheduling local notification:', error);
+      console.error('❌ Error scheduling local notification:', error);
+      console.error('   Options:', options);
       throw error;
     }
   }
@@ -368,11 +528,6 @@ export class NotificationService {
    */
   async requestPermissions(): Promise<boolean> {
     try {
-      if (Platform.OS !== 'web' && !Device.isDevice) {
-        console.log('Must use physical device for notifications');
-        return false;
-      }
-
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
       
@@ -442,7 +597,7 @@ export default notificationService;
 
 // Helper functions for easier integration
 export async function registerForPushNotifications(): Promise<boolean> {
-  notificationService.initialize();
+  await notificationService.initialize();
   return await notificationService.requestPermissions();
 }
 
@@ -457,10 +612,8 @@ export async function scheduleReminderNotification(
   },
   forceReschedule: boolean = false
 ): Promise<void> {
-  // This function will be called from home.tsx to schedule notifications
-  // The actual scheduling is handled by scheduleAllNotifications()
-  // which is already called in the NotificationService
-  console.log(`Schedule reminder notification called for ${reminder.title}`);
+  // Schedule notifications for all reminders
+  await notificationService.scheduleAllNotifications();
 }
 
 export async function cancelMedicationNotifications(medicationId: string): Promise<void> {

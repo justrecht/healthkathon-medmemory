@@ -1,16 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    orderBy,
-    query,
-    setDoc,
-    updateDoc,
-    where,
-    writeBatch,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -134,6 +134,21 @@ export async function deleteReminder(id: string, userId?: string): Promise<boole
   try {
     const docRef = await getDocRef("reminders", id, userId);
     await deleteDoc(docRef);
+    
+    // Clean up associated pending medications
+    const colRef = await getStoragePath("pending_medications", userId);
+    const q = query(colRef, where("reminderId", "==", id));
+    const snap = await getDocs(q);
+    
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      console.log(`Cleaned up ${snap.docs.length} pending medications for reminder ${id}`);
+    }
+    
     return true;
   } catch (error) {
     console.error("Error deleting reminder:", error);
@@ -386,18 +401,29 @@ export type PendingMedication = {
   notifiedAt: string; // ISO string when first notified
 };
 
-export async function addPendingMedication(pending: PendingMedication): Promise<boolean> {
+export async function addPendingMedication(pending: PendingMedication, userId?: string): Promise<boolean> {
   try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_MEDICATIONS);
-    const list: PendingMedication[] = data ? JSON.parse(data) : [];
+    // Create a unique ID based on reminder and scheduled date (not time to avoid millisecond differences)
+    const scheduledDate = pending.scheduledTime.split('T')[0]; // Just the date part
+    const pendingId = `${pending.reminderId}_${scheduledDate}`;
+    
+    // Store in Firestore to prevent duplicates across app restarts
+    const docRef = await getDocRef("pending_medications", pendingId, userId);
     
     // Check if already exists
-    const exists = list.some(p => p.reminderId === pending.reminderId && 
-                               p.scheduledTime === pending.scheduledTime);
-    if (!exists) {
-      list.push(pending);
-      await AsyncStorage.setItem(STORAGE_KEYS.PENDING_MEDICATIONS, JSON.stringify(list));
+    const existingDoc = await getDoc(docRef);
+    if (existingDoc.exists()) {
+      console.log('Pending medication already exists, skipping duplicate');
+      return true;
     }
+    
+    await setDoc(docRef, {
+      ...pending,
+      id: pendingId,
+      createdAt: new Date().toISOString()
+    });
+    
+    console.log('Added pending medication to Firestore:', pendingId);
     return true;
   } catch (error) {
     console.error("Error adding pending medication:", error);
@@ -405,23 +431,37 @@ export async function addPendingMedication(pending: PendingMedication): Promise<
   }
 }
 
-export async function getPendingMedications(): Promise<PendingMedication[]> {
+export async function getPendingMedications(userId?: string): Promise<PendingMedication[]> {
   try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_MEDICATIONS);
-    return data ? JSON.parse(data) : [];
+    const colRef = await getStoragePath("pending_medications", userId);
+    const snap = await getDocs(colRef);
+    const list: PendingMedication[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      list.push({
+        reminderId: data.reminderId,
+        medicationName: data.medicationName,
+        scheduledTime: data.scheduledTime,
+        notifiedAt: data.notifiedAt
+      });
+    });
+    return list;
   } catch (error) {
     console.error("Error getting pending medications:", error);
     return [];
   }
 }
 
-export async function removePendingMedication(reminderId: string, scheduledTime: string): Promise<boolean> {
+export async function removePendingMedication(reminderId: string, scheduledTime: string, userId?: string): Promise<boolean> {
   try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_MEDICATIONS);
-    const list: PendingMedication[] = data ? JSON.parse(data) : [];
+    // Use the same ID format as addPendingMedication
+    const scheduledDate = scheduledTime.split('T')[0];
+    const pendingId = `${reminderId}_${scheduledDate}`;
     
-    const filtered = list.filter(p => !(p.reminderId === reminderId && p.scheduledTime === scheduledTime));
-    await AsyncStorage.setItem(STORAGE_KEYS.PENDING_MEDICATIONS, JSON.stringify(filtered));
+    const docRef = await getDocRef("pending_medications", pendingId, userId);
+    await deleteDoc(docRef);
+    
+    console.log('Removed pending medication from Firestore:', pendingId);
     return true;
   } catch (error) {
     console.error("Error removing pending medication:", error);
@@ -429,9 +469,18 @@ export async function removePendingMedication(reminderId: string, scheduledTime:
   }
 }
 
-export async function clearPendingMedications(): Promise<boolean> {
+export async function clearPendingMedications(userId?: string): Promise<boolean> {
   try {
-    await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_MEDICATIONS);
+    const collectionRef = await getStoragePath("pending_medications", userId);
+    const snapshot = await getDocs(collectionRef);
+    
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+    
+    await batch.commit();
+    console.log(`Cleared ${snapshot.docs.length} pending medications`);
     return true;
   } catch (error) {
     console.error("Error clearing pending medications:", error);

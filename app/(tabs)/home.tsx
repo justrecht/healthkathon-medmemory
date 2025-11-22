@@ -123,7 +123,8 @@ export default function HomeScreen() {
 
     // Set up notification response listener
     const subscription = addNotificationResponseListener((response: any) => {
-      const { medicationId, reminderId, type } = response.notification.request.content.data as { medicationId: string; reminderId: string; type: string };
+      const data = response.notification.request.content.data as { medicationId: string; reminderId: string; type: string };
+      const { medicationId, reminderId, type } = data;
       console.log("Notification tapped:", type, medicationId);
       
       if (type === "ontime") {
@@ -433,21 +434,12 @@ export default function HomeScreen() {
 
   async function scheduleAllNotifications() {
     try {
-      console.log(`Checking notifications for ${reminders.length} reminders`);
-      for (const reminder of reminders) {
-        if (reminder.status === "scheduled") {
-          // Pass forceReschedule=false so it only schedules if not already scheduled
-          await scheduleReminderNotification({
-            id: reminder.id,
-            title: reminder.title,
-            dosage: reminder.dosage,
-            time: reminder.time,
-            notes: reminder.notes,
-            repeatDays: reminder.repeatDays,
-          }, false);
-        }
-      }
-      console.log("Notification check completed");
+      console.log(`Scheduling notifications for ${reminders.length} reminders`);
+      // Import the notification service directly
+      const { notificationService } = await import('../../src/services/notifications');
+      const currentUser = auth.currentUser;
+      await notificationService.scheduleAllNotifications(currentUser?.uid);
+      console.log("Notifications scheduled successfully");
     } catch (error) {
       console.error("Error scheduling notifications:", error);
     }
