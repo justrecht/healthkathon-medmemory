@@ -17,36 +17,39 @@ import { MedicationHistoryModal } from "../../src/components/MedicationHistoryMo
 import RemindersModal from "../../src/components/RemindersModal";
 import { ReminderShimmer } from "../../src/components/shimmer";
 import {
-    ThemedText
+  ThemedText
 } from "../../src/components/ui";
 import { useLanguage } from "../../src/i18n";
 import {
-    getConnectedPatients,
-    getPendingRequests,
-    respondToConnectionRequest,
-    sendConnectionRequest,
-    type ConnectedUser,
-    type ConnectionRequest,
+  getConnectedPatients,
+  getPendingRequests,
+  respondToConnectionRequest,
+  sendConnectionRequest,
+  type ConnectedUser,
+  type ConnectionRequest,
 } from "../../src/services/caregiver";
 import {
-    addNotificationResponseListener,
-    cancelMedicationNotifications,
-    dedupeMedicationNotifications,
-    registerForPushNotifications,
-    scheduleReminderNotification,
-    sendCaregiverNotification,
+  addNotificationResponseListener,
+  cancelMedicationNotifications,
+  dedupeMedicationNotifications,
+  registerForPushNotifications,
+  scheduleReminderNotification,
+  sendCaregiverNotification,
 } from "../../src/services/notifications";
 import {
-    calculateAdherence,
-    clearMedicationHistory,
-    createReminder as createReminderInStore,
-    deleteReminder as deleteReminderInStore,
-    getDailyAdherence,
-    getMedicationHistory,
-    getReminders as getRemindersFromStore,
-    saveMedicationRecord,
-    updateReminder as updateReminderInStore,
-    type MedicationRecord
+  addPendingMedication,
+  calculateAdherence,
+  clearMedicationHistory,
+  createReminder as createReminderInStore,
+  deleteReminder as deleteReminderInStore,
+  getDailyAdherence,
+  getMedicationHistory,
+  getPendingMedications,
+  getReminders as getRemindersFromStore,
+  removePendingMedication,
+  saveMedicationRecord,
+  updateReminder as updateReminderInStore,
+  type MedicationRecord
 } from "../../src/services/storage";
 import { useTheme } from "../../src/theme";
 
@@ -119,21 +122,52 @@ export default function HomeScreen() {
     dedupeMedicationNotifications();
 
     // Set up notification response listener
-    const subscription = addNotificationResponseListener((response) => {
-      const { medicationId, type } = response.notification.request.content.data as { medicationId: string; type: string };
+    const subscription = addNotificationResponseListener((response: any) => {
+      const { medicationId, reminderId, type } = response.notification.request.content.data as { medicationId: string; reminderId: string; type: string };
       console.log("Notification tapped:", type, medicationId);
       
-      if (type === "ontime" || type === "after") {
-        // Navigate to confirmation or show alert
+      if (type === "ontime") {
+        // On-time notification - add to pending list and show confirmation dialog
+        const reminder = reminders.find(r => r.id === medicationId || r.id === reminderId);
+        if (reminder) {
+          addPendingMedication({
+            reminderId: reminder.id,
+            medicationName: reminder.title,
+            scheduledTime: new Date().toISOString(),
+            notifiedAt: new Date().toISOString()
+          });
+        }
+        
         showAlert(
           t("confirmMedication"),
           t("haveYouTakenMeds"),
           [
             { text: t("notYet"), style: "cancel" },
-            { text: t("already"), onPress: () => handleConfirmMedication(medicationId), style: "default" },
+            { text: t("already"), onPress: () => handleConfirmMedication(medicationId || reminderId), style: "default" },
           ],
           "pills",
           "#2874A6"
+        );
+      } else if (type === "late") {
+        // Late notification (10 minutes after) - remind again
+        showAlert(
+          t("medicationReminder"),
+          t("haveTakenMedication"),
+          [
+            { text: t("notYet"), style: "cancel" },
+            { text: t("yes"), onPress: () => handleConfirmMedication(medicationId || reminderId), style: "default" },
+          ],
+          "clock",
+          "#FF8585"
+        );
+      } else if (type === "before") {
+        // Before notification - just a reminder
+        showAlert(
+          t("upcomingMedication"),
+          t("medicationIn30Minutes"),
+          [{ text: t("ok") }],
+          "bell",
+          "#10D99D"
         );
       }
     });
@@ -156,6 +190,53 @@ export default function HomeScreen() {
       }
     }
   }, [reminders, loading]);
+
+  // Monitor pending medications and notify caregivers when patient is late
+  useEffect(() => {
+    if (userRole !== 'patient') return;
+
+    const checkPendingMedications = async () => {
+      try {
+        const pending = await getPendingMedications();
+        const now = new Date();
+
+        for (const medication of pending) {
+          const scheduledTime = new Date(medication.scheduledTime);
+          const minutesLate = Math.floor((now.getTime() - scheduledTime.getTime()) / (1000 * 60));
+
+          // If more than 10 minutes late, notify caregivers
+          if (minutesLate >= 10 && caregivers.length > 0) {
+            // Send notification to each caregiver
+            for (const caregiver of caregivers) {
+              const userName = auth.currentUser?.displayName || auth.currentUser?.email || 'Patient';
+              await sendCaregiverNotification({
+                caregiverId: caregiver.id,
+                patientName: userName,
+                medicationName: medication.medicationName,
+                scheduledTime: scheduledTime.toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })
+              });
+            }
+
+            // Remove from pending list after notifying caregivers
+            await removePendingMedication(medication.reminderId, medication.scheduledTime);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking pending medications:', error);
+      }
+    };
+
+    // Check every minute for pending medications
+    const interval = setInterval(checkPendingMedications, 60000);
+    
+    // Run immediately on mount
+    checkPendingMedications();
+
+    return () => clearInterval(interval);
+  }, [userRole, caregivers]);
 
   const showAlert = (title: string, message: string, buttons?: Array<{text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive"}>, icon?: keyof typeof FontAwesome6.glyphMap, iconColor?: string) => {
     setCustomAlert({
@@ -557,6 +638,13 @@ export default function HomeScreen() {
         
         // Update local history state
         setMedicationHistory(prev => [record, ...prev]);
+        
+        // Remove from pending medications list (if it was pending)
+        const pendingList = await getPendingMedications();
+        const pendingItem = pendingList.find(p => p.reminderId === targetId);
+        if (pendingItem) {
+          await removePendingMedication(targetId, pendingItem.scheduledTime);
+        }
       }
 
       // Update UI with current date
@@ -567,7 +655,7 @@ export default function HomeScreen() {
       // Persist status change to Firestore with date
       await updateReminderInStore(targetId, { status: "taken", lastTakenDate: now } as any);
 
-      // Cancel any pending notifications for this medication (e.g. the "After" reminder)
+      // Cancel any pending notifications for this medication (e.g. the "late" reminder)
       await cancelMedicationNotifications(targetId);
 
       // Refresh adherence data
@@ -697,11 +785,6 @@ export default function HomeScreen() {
               for (const caregiver of caregivers) {
                 await sendCaregiverNotification(
                   caregiver.id,
-                  caregiver.name || caregiver.email,
-                  reminder.title,
-                  patientId,
-                  patientName,
-                  reminder.time
                 );
               }
             }

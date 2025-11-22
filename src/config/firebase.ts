@@ -37,7 +37,6 @@ export { auth };
 // Initialize Firestore with React Native compatibility
 initializeFirestore(app, { experimentalForceLongPolling: true });
 export const db = getFirestore(app);
-
 // Reduce Firestore log noise (e.g., transient BloomFilter warnings)
 setLogLevel("error");
 

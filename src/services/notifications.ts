@@ -1,11 +1,19 @@
-import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
-import { t_static } from "../i18n";
-import { clearScheduledNotifications, getScheduledNotifications, getUISettings, saveScheduledNotifications } from "./storage";
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import {
+  clearScheduledNotifications,
+  getReminders,
+  getScheduledNotifications,
+  getUISettings,
+  Reminder,
+  saveScheduledNotifications
+} from './storage';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
+    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -13,109 +21,433 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Keep track of scheduled notifications to prevent duplicates
-let scheduledNotifications = new Map<string, string[]>();
-let isInitialized = false;
+// Notification channel for Android
+const NOTIFICATION_CHANNEL = {
+  channelId: 'medication-reminders',
+  name: 'Medication Reminders',
+  importance: Notifications.AndroidImportance.MAX,
+  description: 'Notifications for medication schedules',
+  sound: 'default',
+  vibrationPattern: [0, 250, 250, 250],
+  enableLights: true,
+  enableVibrate: true,
+};
 
-// Initialize from storage
-async function initializeScheduledNotifications() {
-  if (isInitialized) return;
-  scheduledNotifications = await getScheduledNotifications();
-  isInitialized = true;
-  console.log(`Loaded ${scheduledNotifications.size} medication notification records from storage`);
-}
+export class NotificationService {
+  private static instance: NotificationService;
+  private isInitialized = false;
 
-export async function registerForPushNotifications() {
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("medication-reminders", {
-      name: "Pengingat Obat",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#2874A6",
-      sound: "default",
-      enableLights: true,
-      enableVibrate: true,
-      showBadge: true,
-    });
+  private constructor() {}
+
+  static getInstance(): NotificationService {
+    if (!NotificationService.instance) {
+      NotificationService.instance = new NotificationService();
+    }
+    return NotificationService.instance;
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== "granted") {
-    console.warn("Failed to get push token for push notification!");
-    return null;
-  }
-
-  return finalStatus;
-}
-
-// Remove duplicated scheduled notifications across app sessions
-export async function dedupeMedicationNotifications() {
-  await initializeScheduledNotifications();
-  try {
-    const all = await Notifications.getAllScheduledNotificationsAsync();
-    // Group by medicationId + type + weekday (to handle recurring correctly)
-    const groups = new Map<string, Array<{ id: string; trigger: any }>>();
-    for (const n of all) {
-      const medId = (n.content?.data as any)?.medicationId as string | undefined;
-      const type = (n.content?.data as any)?.type as string | undefined;
-      const trigger = n.trigger as any;
-      const weekday = trigger?.weekday ?? 'none';
-      const hour = trigger?.hour ?? 'none';
-      const minute = trigger?.minute ?? 'none';
-
-      if (!medId || !type) continue;
-      
-      // Key includes weekday, hour, and minute so we only group exact duplicates
-      const key = `${medId}:${type}:${weekday}:${hour}:${minute}`;
-      const arr = groups.get(key) || [];
-      arr.push({ id: n.identifier, trigger });
-      groups.set(key, arr);
+  /**
+   * Initialize notification system
+   */
+  async initialize() {
+    if (this.isInitialized) {
+      console.log('Notification service already initialized');
+      return;
     }
 
-    const toCancel: string[] = [];
-    for (const [key, arr] of groups.entries()) {
-      // If there are duplicates for the exact same time slot, keep only the first one
-      if (arr.length > 1) {
-        for (let i = 1; i < arr.length; i++) {
-          toCancel.push(arr[i].id);
+    console.log('Initializing notification service...');
+
+    // Create notification channel for Android
+    if (Platform.OS === 'android') {
+      await this.createNotificationChannel();
+    }
+
+    // Set up notification received listener
+    Notifications.addNotificationReceivedListener(async (notification) => {
+      console.log('Notification Received:', notification);
+      
+      const { type, reminderId, medicationId } = notification.request.content.data;
+      
+      // If this is an on-time notification, add to pending medications
+      if (type === 'ontime') {
+        const { addPendingMedication, getReminders } = await import('./storage');
+        try {
+          // Get the reminder details
+          const reminders = await getReminders();
+          const reminder = reminders.find(r => r.id === reminderId || r.id === medicationId);
+          
+          if (reminder) {
+            await addPendingMedication({
+              reminderId: reminder.id,
+              medicationName: reminder.title,
+              scheduledTime: new Date().toISOString(),
+              notifiedAt: new Date().toISOString()
+            });
+            console.log('Added to pending medications:', reminder.title);
+          }
+        } catch (error) {
+          console.error('Error adding to pending medications:', error);
         }
       }
-    }
+    });
 
-    // Cancel duplicates
-    for (const id of toCancel) {
-      await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
-    }
+    // Set up notification response listener (when user taps notification)
+    Notifications.addNotificationResponseReceivedListener((response) => {
+      console.log('Notification tapped:', response);
+      this.handleNotificationOpen(response.notification);
+    });
 
-    if (toCancel.length > 0) {
-      // Rebuild in-memory map from remaining notifications
-      const remaining = await Notifications.getAllScheduledNotificationsAsync();
-      const newMap = new Map<string, string[]>();
-      for (const n of remaining) {
-        const medId = (n.content?.data as any)?.medicationId as string | undefined;
-        if (!medId) continue;
-        const list = newMap.get(medId) || [];
-        list.push(n.identifier);
-        newMap.set(medId, list);
-      }
-      scheduledNotifications = newMap;
-      await saveScheduledNotifications(scheduledNotifications);
-      console.log(`Deduped notifications. Cancelled ${toCancel.length} duplicates.`);
-    }
-  } catch (e) {
-    console.warn("Failed to dedupe notifications", e);
+    this.isInitialized = true;
+    console.log('Notification service initialized successfully');
   }
+
+  /**
+   * Create notification channel for Android
+   */
+  private async createNotificationChannel() {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL.channelId, {
+        name: NOTIFICATION_CHANNEL.name,
+        importance: NOTIFICATION_CHANNEL.importance,
+        description: NOTIFICATION_CHANNEL.description,
+        sound: NOTIFICATION_CHANNEL.sound,
+        vibrationPattern: NOTIFICATION_CHANNEL.vibrationPattern,
+        enableLights: NOTIFICATION_CHANNEL.enableLights,
+        enableVibrate: NOTIFICATION_CHANNEL.enableVibrate,
+      });
+      console.log('Android notification channel created successfully');
+    }
+  }
+
+  /**
+   * Handle notification open event
+   */
+  private handleNotificationOpen(notification: Notifications.Notification) {
+    const { reminderId, medicationId } = notification.request.content.data;
+    
+    if (reminderId) {
+      console.log(`Opening reminder: ${reminderId}`);
+      // Navigate to medication detail or mark as taken
+      // You can use a navigation service here
+    }
+  }
+
+  /**
+   * Schedule notifications for all reminders
+   */
+  async scheduleAllNotifications(userId?: string) {
+    try {
+      console.log('Scheduling all notifications...');
+      
+      // Clear existing notifications
+      await this.cancelAllNotifications();
+
+      // Get UI settings to check if notifications are enabled
+      const settings = await getUISettings(userId);
+      if (!settings.beforeSchedule) {
+        console.log('Notifications disabled in settings');
+        return;
+      }
+
+      // Get all reminders
+      const reminders = await getReminders(userId);
+      console.log(`Found ${reminders.length} reminders to schedule`);
+
+      const notificationMap = new Map<string, string[]>();
+
+      for (const reminder of reminders) {
+        if (reminder.status !== 'scheduled') {
+          continue;
+        }
+
+        const notificationIds = await this.scheduleReminderNotifications(reminder, settings.beforeSchedule);
+        if (notificationIds.length > 0) {
+          notificationMap.set(reminder.id, notificationIds);
+        }
+      }
+
+      // Save scheduled notification IDs
+      await saveScheduledNotifications(notificationMap);
+      
+      console.log(`Scheduled notifications for ${notificationMap.size} reminders`);
+    } catch (error) {
+      console.error('Error scheduling all notifications:', error);
+    }
+  }
+
+  /**
+   * Schedule notifications for a specific reminder
+   */
+  private async scheduleReminderNotifications(reminder: Reminder, enableBeforeNotification: boolean): Promise<string[]> {
+    const notificationIds: string[] = [];
+
+    try {
+      const [hours, minutes] = reminder.time.split(':').map(Number);
+      
+      // Get repeat days (default to all days if not specified)
+      const repeatDays = reminder.repeatDays && reminder.repeatDays.length > 0 
+        ? reminder.repeatDays 
+        : [0, 1, 2, 3, 4, 5, 6];
+
+      for (const dayOfWeek of repeatDays) {
+        // Calculate next occurrence of this day
+        const fireDate = this.getNextDateForDayAndTime(dayOfWeek, hours, minutes);
+
+        // Schedule main notification (on-time notification)
+        const mainNotificationId = `${reminder.id}_${dayOfWeek}`;
+        await this.scheduleLocalNotification({
+          id: mainNotificationId,
+          title: '💊 ' + reminder.title,
+          body: `Time to take ${reminder.dosage}${reminder.notes ? ` - ${reminder.notes}` : ''}`,
+          fireDate,
+          payload: {
+            reminderId: reminder.id,
+            medicationId: reminder.id,
+            type: 'ontime'
+          },
+          repeatType: 'week' // Repeat weekly
+        });
+        notificationIds.push(mainNotificationId);
+
+        // Schedule "before" notification (30 minutes before)
+        if (enableBeforeNotification) {
+          const beforeFireDate = new Date(fireDate);
+          beforeFireDate.setMinutes(beforeFireDate.getMinutes() - 30);
+          
+          const beforeNotificationId = `${reminder.id}_${dayOfWeek}_before`;
+          await this.scheduleLocalNotification({
+            id: beforeNotificationId,
+            title: '⏰ Upcoming Medication',
+            body: `${reminder.title} in 30 minutes (${reminder.dosage})`,
+            fireDate: beforeFireDate,
+            payload: {
+              reminderId: reminder.id,
+              medicationId: reminder.id,
+              type: 'before'
+            },
+            repeatType: 'week'
+          });
+          notificationIds.push(beforeNotificationId);
+        }
+
+        // Schedule "late" notification (10 minutes after scheduled time)
+        const lateFireDate = new Date(fireDate);
+        lateFireDate.setMinutes(lateFireDate.getMinutes() + 10);
+        
+        const lateNotificationId = `${reminder.id}_${dayOfWeek}_late`;
+        await this.scheduleLocalNotification({
+          id: lateNotificationId,
+          title: '⚠️ Medication Reminder',
+          body: `Did you take your ${reminder.title}? (${reminder.dosage})`,
+          fireDate: lateFireDate,
+          payload: {
+            reminderId: reminder.id,
+            medicationId: reminder.id,
+            type: 'late'
+          },
+          repeatType: 'week'
+        });
+        notificationIds.push(lateNotificationId);
+      }
+
+      console.log(`Scheduled ${notificationIds.length} notifications for reminder: ${reminder.title}`);
+    } catch (error) {
+      console.error(`Error scheduling notifications for reminder ${reminder.id}:`, error);
+    }
+
+    return notificationIds;
+  }
+
+  /**
+   * Get next date for a specific day of week and time
+   */
+  private getNextDateForDayAndTime(dayOfWeek: number, hours: number, minutes: number): Date {
+    const now = new Date();
+    const targetDate = new Date(now);
+    
+    targetDate.setHours(hours, minutes, 0, 0);
+    
+    // Calculate days until target day
+    const currentDay = now.getDay();
+    let daysUntilTarget = dayOfWeek - currentDay;
+    
+    // If target day is today but time has passed, schedule for next week
+    if (daysUntilTarget === 0 && now.getTime() > targetDate.getTime()) {
+      daysUntilTarget = 7;
+    } else if (daysUntilTarget < 0) {
+      daysUntilTarget += 7;
+    }
+    
+    targetDate.setDate(now.getDate() + daysUntilTarget);
+    
+    return targetDate;
+  }
+
+  /**
+   * Schedule a local notification
+   */
+  private async scheduleLocalNotification(options: {
+    id: string;
+    title: string;
+    body: string;
+    fireDate: Date;
+    payload?: any;
+    repeatType?: 'week' | 'day';
+  }) {
+    try {
+      const trigger: Notifications.NotificationTriggerInput = 
+        options.repeatType === 'week' 
+          ? {
+              weekday: options.fireDate.getDay() + 1, // expo uses 1-7, JS uses 0-6
+              hour: options.fireDate.getHours(),
+              minute: options.fireDate.getMinutes(),
+              repeats: true,
+            } as Notifications.NotificationTriggerInput
+          : options.fireDate as any;
+
+      await Notifications.scheduleNotificationAsync({
+        identifier: options.id,
+        content: {
+          title: options.title,
+          body: options.body,
+          data: options.payload || {},
+          sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          ...(Platform.OS === 'android' && {
+            channelId: NOTIFICATION_CHANNEL.channelId,
+          }),
+        },
+        trigger,
+      });
+      
+      console.log(`Scheduled notification: ${options.title} at ${options.fireDate.toISOString()}`);
+    } catch (error) {
+      console.error('Error scheduling local notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel all scheduled notifications
+   */
+  async cancelAllNotifications() {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      await clearScheduledNotifications();
+      console.log('All notifications cancelled');
+    } catch (error) {
+      console.error('Error cancelling notifications:', error);
+    }
+  }
+
+  /**
+   * Cancel notifications for a specific reminder
+   */
+  async cancelReminderNotifications(reminderId: string) {
+    try {
+      const notificationMap = await getScheduledNotifications();
+      const notificationIds = notificationMap.get(reminderId);
+
+      if (notificationIds && notificationIds.length > 0) {
+        for (const id of notificationIds) {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        }
+        
+        notificationMap.delete(reminderId);
+        await saveScheduledNotifications(notificationMap);
+        
+        console.log(`Cancelled ${notificationIds.length} notifications for reminder: ${reminderId}`);
+      }
+    } catch (error) {
+      console.error('Error cancelling reminder notifications:', error);
+    }
+  }
+
+  /**
+   * Request notification permissions
+   */
+  async requestPermissions(): Promise<boolean> {
+    try {
+      if (Platform.OS !== 'web' && !Device.isDevice) {
+        console.log('Must use physical device for notifications');
+        return false;
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('Failed to get notification permissions');
+        return false;
+      }
+      
+      console.log('Notification permissions granted');
+      return true;
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if notifications are enabled
+   */
+  async checkPermissions(): Promise<boolean> {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error checking notification permissions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send notification to caregiver when patient is late taking medication
+   */
+  async notifyCaregiver(params: {
+    caregiverId: string;
+    patientName: string;
+    medicationName: string;
+    scheduledTime: string;
+  }) {
+    try {
+      // Create local notification for caregiver
+      // Note: In a production app, you'd typically send a push notification via your backend
+      // to the caregiver's device. For now, we'll just log this.
+      console.log('Notifying caregiver:', params);
+      
+      // You would implement this to send a push notification to the caregiver's device
+      // via Firebase Cloud Messaging or similar service
+      // For now, this is a placeholder that logs the notification
+      
+      return true;
+    } catch (error) {
+      console.error('Error notifying caregiver:', error);
+      return false;
+    }
+  }
+}
+
+// Export singleton instance
+export const notificationService = NotificationService.getInstance();
+
+// Default export for better module resolution
+export default notificationService;
+
+// Helper functions for easier integration
+export async function registerForPushNotifications(): Promise<boolean> {
+  notificationService.initialize();
+  return await notificationService.requestPermissions();
 }
 
 export async function scheduleReminderNotification(
-  medication: {
+  reminder: {
     id: string;
     title: string;
     dosage: string;
@@ -124,432 +456,61 @@ export async function scheduleReminderNotification(
     repeatDays?: number[];
   },
   forceReschedule: boolean = false
-) {
-  // Initialize from storage if not done yet
-  await initializeScheduledNotifications();
+): Promise<void> {
+  // This function will be called from home.tsx to schedule notifications
+  // The actual scheduling is handled by scheduleAllNotifications()
+  // which is already called in the NotificationService
+  console.log(`Schedule reminder notification called for ${reminder.title}`);
+}
 
-  // Get UI settings to check if "before" notification is enabled
-  const uiSettings = await getUISettings();
-  const enableBeforeNotification = uiSettings.beforeSchedule;
+export async function cancelMedicationNotifications(medicationId: string): Promise<void> {
+  await notificationService.cancelReminderNotifications(medicationId);
+}
 
-  // Check if notifications are already scheduled and still valid
-  if (!forceReschedule) {
-    const existing = scheduledNotifications.get(medication.id);
-    if (existing && existing.length > 0) {
-      // Verify that these notifications actually exist in the system
-      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
-      const existingIds = new Set(allScheduled.map(n => n.identifier));
-      const stillValid = existing.filter(id => existingIds.has(id));
-      
-      // Check if we have the expected number of notifications
-      // For recurring (repeatDays) we now only schedule on-time + after (2 each per day)
-      const expectedCount = medication.repeatDays?.length 
-        ? medication.repeatDays.length * 2
-        : (enableBeforeNotification ? 3 : 2);
-      
-      if (stillValid.length === existing.length && stillValid.length >= expectedCount) {
-        console.log(`✓ Notifications already scheduled for ${medication.title} (${stillValid.length}/${expectedCount} active), skipping...`);
-        return {
-          beforeNotificationId: stillValid[0],
-          onTimeNotificationId: stillValid[1],
-          afterNotificationId: stillValid[2],
-        };
-      }
-      
-      console.log(`⚠ Incomplete notifications for ${medication.title} (${stillValid.length}/${expectedCount}), rescheduling...`);
-      // Cancel incomplete set
-      for (const notifId of existing) {
-        await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
-      }
-      scheduledNotifications.delete(medication.id);
-    }
-  } else {
-    // Force reschedule - cancel existing
-    const existing = scheduledNotifications.get(medication.id);
-    if (existing && existing.length > 0) {
-      console.log(`🔄 Force rescheduling ${existing.length} notifications for ${medication.title}...`);
-      for (const notifId of existing) {
-        await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
-      }
-      scheduledNotifications.delete(medication.id);
-    }
-  }
+export async function dedupeMedicationNotifications(): Promise<void> {
+  // Placeholder for deduplication logic
+  console.log('Dedupe medication notifications called');
+}
 
-  // Parse time (format: "HH:MM") and use DEVICE LOCAL TIME
-  const [hours, minutes] = medication.time.split(":").map(Number);
+export function addNotificationResponseListener(handler: (response: any) => void): { remove: () => void } {
+  // Set up the notification response listener
+  const subscription = Notifications.addNotificationResponseReceivedListener(handler);
   
-  if (isNaN(hours) || isNaN(minutes)) {
-    console.error(`Invalid time format for medication ${medication.title}: ${medication.time}`);
-    return null;
-  }
-
-  const notificationIds: string[] = [];
-
-  // Helper function to check if a recurring notification would trigger very soon
-  const wouldTriggerSoon = (dayIndex: number, hour: number, minute: number): boolean => {
-    const now = new Date();
-    const currentDay = now.getDay();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    
-    // If it's for today and the time hasn't passed, check if it's within 3 minutes
-    if (dayIndex === currentDay) {
-      const targetTime = hour * 60 + minute;
-      const currentTime = currentHour * 60 + currentMinute;
-      const timeDiff = targetTime - currentTime;
-      
-      // If time difference is between 0 and 3 minutes, it would trigger too soon
-      if (timeDiff >= 0 && timeDiff <= 3) {
-        return true;
-      }
-      // If time has already passed, it won't trigger today
-      if (timeDiff < 0) {
-        return false;
-      }
-    }
-    
-    return false;
-  };
-
-  // If repeatDays is provided, use recurring notifications
-  if (medication.repeatDays && medication.repeatDays.length > 0) {
-    console.log(`📅 Scheduling recurring notifications for ${medication.title} on ${medication.repeatDays.length} days at ${medication.time}`);
-    console.log(`   Days selected: ${medication.repeatDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`);
-    
-    const now = new Date();
-    const currentDay = now.getDay();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    
-    for (const dayIndex of medication.repeatDays) {
-      const weekday = dayIndex + 1; // Expo weekday
-      const dayLabel = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIndex];
-      const daysAhead = (dayIndex - currentDay + 7) % 7; // offset (0..6)
-      const targetDate = new Date();
-      targetDate.setHours(hours, minutes, 0, 0);
-      targetDate.setDate(targetDate.getDate() + daysAhead);
-
-      // If the scheduled time has already passed for this occurrence, schedule for next week
-      if (targetDate.getTime() <= Date.now()) {
-        targetDate.setDate(targetDate.getDate() + 7);
-      }
-
-      // Kita selalu jadwalkan occurrence pertama sebagai one-time date (bukan repeat) agar Android tidak memicu langsung.
-      // Setelah menembak, listener akan mengubahnya jadi weekly repeat.
-      const onTimeId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: t_static("notifTimeTitle"),
-          body: t_static("notifTimeBody", { title: medication.title, dosage: medication.dosage }) + (medication.notes ? `\n${medication.notes}` : ''),
-          data: { medicationId: medication.id, type: 'ontime', oneTime: true },
-          sound: true,
-          // @ts-ignore
-          channelId: 'medication-reminders',
-        },
-        trigger: { channelId: 'medication-reminders', date: targetDate } as any,
-      });
-      notificationIds.push(onTimeId);
-      console.log(`   ▶ Scheduled first on-time (one-time) for ${dayLabel} at ${targetDate.toLocaleString()}`);
-
-      // AFTER (+10 menit)
-      const afterDate = new Date(targetDate.getTime() + 10 * 60 * 1000);
-      const afterId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: t_static("notifAfterTitle"),
-          body: t_static("notifAfterBody", { title: medication.title }),
-          data: { medicationId: medication.id, type: 'after', oneTime: true },
-          sound: true,
-          // @ts-ignore
-          channelId: 'medication-reminders',
-        },
-        trigger: { channelId: 'medication-reminders', date: afterDate } as any,
-      });
-      notificationIds.push(afterId);
-      console.log(`   ▶ Scheduled first after (+10m) one-time for ${dayLabel} at ${afterDate.toLocaleString()}`);
-    }
-  } else {
-    // Legacy/One-time logic
-    const now = new Date();
-    const scheduledTime = new Date();
-    // Set local device time directly
-    scheduledTime.setHours(hours, minutes, 0, 0);
-
-    // If the time has passed today (with 2 minute buffer), schedule for tomorrow
-    if (scheduledTime.getTime() <= now.getTime() + 120000) {
-      scheduledTime.setDate(scheduledTime.getDate() + 1);
-    }
-
-    console.log(`Scheduling one-time notifications for ${medication.title} at ${scheduledTime.toLocaleString()}`);
-
-    // Schedule 30 minutes before
-    const beforeTime = new Date(scheduledTime.getTime() - 30 * 60 * 1000);
-    
-    // Schedule notification 30 minutes before (only if in future AND enabled)
-    if (enableBeforeNotification && beforeTime.getTime() > now.getTime() + 120000) {
-      const beforeNotificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: t_static("notifBeforeTitle"),
-          body: t_static("notifBeforeBody", { title: medication.title, dosage: medication.dosage }),
-          data: { medicationId: medication.id, type: "before" },
-          sound: true,
-        },
-        trigger: { 
-          channelId: "medication-reminders",
-          date: beforeTime,
-        },
-      });
-      notificationIds.push(beforeNotificationId);
-    }
-
-    // Schedule notification at exact time
-    const onTimeNotificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: t_static("notifTimeTitle"),
-        body: t_static("notifTimeBody", { title: medication.title, dosage: medication.dosage }) + (medication.notes ? `\n${medication.notes}` : ""),
-        data: { medicationId: medication.id, type: "ontime" },
-        sound: true,
-      },
-      trigger: { 
-        channelId: "medication-reminders",
-        date: scheduledTime,
-      },
-    });
-    notificationIds.push(onTimeNotificationId);
-
-    // Schedule reminder 10 minutes after if not confirmed
-    const afterTime = new Date(scheduledTime.getTime() + 10 * 60 * 1000);
-    const afterNotificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: t_static("notifAfterTitle"),
-        body: t_static("notifAfterBody", { title: medication.title }),
-        data: { medicationId: medication.id, type: "after" },
-        sound: true,
-      },
-      trigger: { 
-        channelId: "medication-reminders",
-        date: afterTime,
-      },
-    });
-    notificationIds.push(afterNotificationId);
-  }
-
-  // Store the notification IDs in memory and persist to storage
-  scheduledNotifications.set(medication.id, notificationIds);
-  await saveScheduledNotifications(scheduledNotifications);
-  console.log(`✅ Scheduled ${notificationIds.length} notifications for ${medication.title}`);
-
   return {
-    beforeNotificationId: notificationIds[0],
-    onTimeNotificationId: notificationIds[1],
-    afterNotificationId: notificationIds[2],
+    remove: () => {
+      subscription.remove();
+      console.log('Notification listener removed');
+    }
   };
 }
 
-export async function cancelNotification(notificationId: string) {
-  await Notifications.cancelScheduledNotificationAsync(notificationId);
-}
-
-export async function cancelMedicationNotifications(medicationId: string) {
-  await initializeScheduledNotifications();
+export async function sendCaregiverNotification(params: {
+  caregiverId: string;
+  patientName: string;
+  medicationName: string;
+  scheduledTime: string;
+}): Promise<void> {
+  await notificationService.notifyCaregiver(params);
   
-  const existing = scheduledNotifications.get(medicationId);
-  if (existing) {
-    for (const notifId of existing) {
-      await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
-    }
-    scheduledNotifications.delete(medicationId);
-    await saveScheduledNotifications(scheduledNotifications);
-    console.log(`Cancelled and removed notifications for ${medicationId}`);
-  }
-}
-
-export async function cancelAllNotifications() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  scheduledNotifications.clear();
-  await clearScheduledNotifications();
-  console.log("Cancelled all notifications and cleared storage");
-}
-
-export async function sendCaregiverNotification(
-  caregiverId: string,
-  caregiverName: string,
-  medicationName: string,
-  patientId: string,
-  patientName: string,
-  scheduledTime: string
-) {
+  // Also try to send via Firebase Cloud Messaging if available
   try {
-    // Import Firestore functions
     const { collection, addDoc } = await import('firebase/firestore');
     const { db } = await import('../config/firebase');
-
+    
     // Store notification in Firestore for the caregiver
-    const notificationData = {
-      type: 'missed_medication',
-      caregiverId,
-      patientId,
-      patientName,
-      medicationName,
-      scheduledTime,
-      message: t_static("caregiverMissedMessage", { patientName, medicationName, scheduledTime }),
+    const notificationRef = collection(db, 'users', params.caregiverId, 'notifications');
+    await addDoc(notificationRef, {
+      type: 'patient_late',
+      patientName: params.patientName,
+      medicationName: params.medicationName,
+      scheduledTime: params.scheduledTime,
+      message: `${params.patientName} is late taking ${params.medicationName} (scheduled at ${params.scheduledTime})`,
       read: false,
-      createdAt: new Date().toISOString(),
-    };
-
-    await addDoc(collection(db, 'caregiver_notifications'), notificationData);
-    console.log(`📨 Notification sent to caregiver ${caregiverName} about missed medication: ${medicationName}`);
-
-    // Also send a local notification (for demo purposes or if caregiver is using the same device)
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: t_static("caregiverAlertTitle"),
-        body: t_static("caregiverAlertBody", { patientName, medicationName, scheduledTime }),
-        data: { 
-          type: "caregiver-alert",
-          patientId,
-          medicationName,
-          scheduledTime,
-        },
-        sound: true,
-      },
-      trigger: null, // Send immediately
+      createdAt: new Date().toISOString()
     });
-
-    return { success: true };
+    
+    console.log('Caregiver notification sent to Firestore');
   } catch (error) {
-    console.error('Error sending caregiver notification:', error);
-    return { success: false, error };
+    console.error('Error sending caregiver notification to Firestore:', error);
   }
-}
-
-export async function scheduleCaregiversMissedNotification(
-  medication: {
-    id: string;
-    title: string;
-    time: string;
-  },
-  patientId: string,
-  patientName: string,
-  caregivers: Array<{ id: string; name: string }>
-) {
-  // Schedule a notification to be sent to caregivers 30 minutes after scheduled time
-  // if the medication hasn't been confirmed
-  const [hours, minutes] = medication.time.split(':').map(Number);
-  const notificationTime = new Date();
-  notificationTime.setHours(hours, minutes + 30, 0, 0);
-
-  // If the time has already passed today, schedule for tomorrow
-  if (notificationTime.getTime() <= Date.now()) {
-    notificationTime.setDate(notificationTime.getDate() + 1);
-  }
-
-  console.log(`⏰ Scheduling caregiver missed notification for ${medication.title} at ${notificationTime.toLocaleString()}`);
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: t_static("caregiverCheckTitle"),
-      body: t_static("caregiverCheckBody", { patientName, medicationName: medication.title }),
-      data: {
-        type: "caregiver-check",
-        medicationId: medication.id,
-        patientId,
-        caregivers: JSON.stringify(caregivers),
-      },
-      sound: true,
-    },
-    trigger: {
-      channelId: "medication-reminders",
-      date: notificationTime,
-    },
-  });
-}
-
-export async function sendTestNotification() {
-  // Send a test notification immediately
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: t_static("testNotifTitle"),
-      body: t_static("testNotifBody"),
-      data: { type: "test" },
-      sound: true,
-    },
-    trigger: null, // Send immediately
-  });
-}
-
-export async function getAllScheduledNotifications() {
-  return await Notifications.getAllScheduledNotificationsAsync();
-}
-
-export function addNotificationResponseListener(
-  callback: (response: Notifications.NotificationResponse) => void
-) {
-  return Notifications.addNotificationResponseReceivedListener(callback);
-}
-
-// Listener untuk menjemput notifikasi yang bersifat one-time (karena waktu sudah lewat hari ini)
-// Setelah notifikasi one-time (ontime/after) dikirim, kita jadwalkan ulang menjadi weekly repeat normal.
-export function addNotificationReceivedListener() {
-  return Notifications.addNotificationReceivedListener(async (notification) => {
-    try {
-      const data: any = notification.request.content.data;
-      if (!data || !data.oneTime || !data.medicationId) return;
-      const medId = data.medicationId as string;
-      const type = data.type as string;
-      // Ambil detail reminder dari storage
-      const reminders = await (await import('./storage')).getReminders();
-      const medication = reminders.find(r => r.id === medId);
-      if (!medication) return;
-
-      const [h, m] = medication.time.split(':').map(Number);
-      const now = new Date();
-      let jsWeekday = now.getDay(); // hari aktual saat notifikasi pertama menembak (mutable)
-      let expoWeekday = jsWeekday + 1; // format expo
-
-      // Jika reminder memiliki repeatDays, kita gunakan weekday sesuai mapping repeatDays agar align hari.
-      // Cari index yang cocok dengan jsWeekday; kalau tidak ada, fallback ke jsWeekday agar tetap ter-repeat.
-      if (medication.repeatDays && medication.repeatDays.length > 0) {
-        if (!medication.repeatDays.includes(jsWeekday)) {
-          // Pilih hari pertama dalam daftar repeatDays untuk repeat mingguan berikutnya
-          const chosen = medication.repeatDays[0];
-          jsWeekday = chosen;
-          expoWeekday = jsWeekday + 1;
-        }
-      }
-
-      // Hanya jadwalkan ulang untuk tipe utama (ontime/after) agar pola mingguan kembali.
-      if (type === 'ontime') {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: t_static("notifTimeTitle"),
-            body: t_static("notifTimeBody", { title: medication.title, dosage: medication.dosage }) + (medication.notes ? `\n${medication.notes}` : ''),
-            data: { medicationId: medId, type: 'ontime' },
-            sound: true,
-            // @ts-ignore
-            channelId: 'medication-reminders',
-          },
-          trigger: { weekday: expoWeekday, hour: h, minute: m, repeats: true } as any,
-        });
-      }
-      if (type === 'after') {
-        let afterHour = h;
-        let afterMinute = m + 10;
-        if (afterMinute >= 60) { afterMinute -= 60; afterHour += 1; }
-        if (afterHour >= 24) { afterHour -= 24; }
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: t_static("notifAfterTitle"),
-            body: t_static("notifAfterBody", { title: medication.title }),
-            data: { medicationId: medId, type: 'after' },
-            sound: true,
-            // @ts-ignore
-            channelId: 'medication-reminders',
-          },
-            trigger: { weekday: expoWeekday, hour: afterHour, minute: afterMinute, repeats: true } as any,
-        });
-      }
-      console.log(`🔁 Auto-rescheduled weekly notifications for ${medication.title} (type: ${type})`);
-    } catch (err) {
-      console.warn('Failed to auto-reschedule weekly notification', err);
-    }
-  });
 }

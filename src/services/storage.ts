@@ -1,16 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  setDoc,
-  updateDoc,
-  where,
-  writeBatch,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    orderBy,
+    query,
+    setDoc,
+    updateDoc,
+    where,
+    writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -21,6 +21,7 @@ const STORAGE_KEYS = {
   NOTIFICATION_SETTINGS: "@notification_settings",
   UI_SETTINGS: "@ui_settings",
   SCHEDULED_NOTIFICATIONS: "@scheduled_notifications",
+  PENDING_MEDICATIONS: "@pending_medications",
 };
 
 const DEVICE_ID_KEY = "@device_id";
@@ -373,6 +374,67 @@ export async function saveNotificationSettings(settings: NotificationSettings) {
     return true;
   } catch (error) {
     console.error("Error saving notification settings:", error);
+    return false;
+  }
+}
+
+// Pending medication tracking (for late notifications)
+export type PendingMedication = {
+  reminderId: string;
+  medicationName: string;
+  scheduledTime: string; // ISO string
+  notifiedAt: string; // ISO string when first notified
+};
+
+export async function addPendingMedication(pending: PendingMedication): Promise<boolean> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_MEDICATIONS);
+    const list: PendingMedication[] = data ? JSON.parse(data) : [];
+    
+    // Check if already exists
+    const exists = list.some(p => p.reminderId === pending.reminderId && 
+                               p.scheduledTime === pending.scheduledTime);
+    if (!exists) {
+      list.push(pending);
+      await AsyncStorage.setItem(STORAGE_KEYS.PENDING_MEDICATIONS, JSON.stringify(list));
+    }
+    return true;
+  } catch (error) {
+    console.error("Error adding pending medication:", error);
+    return false;
+  }
+}
+
+export async function getPendingMedications(): Promise<PendingMedication[]> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_MEDICATIONS);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error("Error getting pending medications:", error);
+    return [];
+  }
+}
+
+export async function removePendingMedication(reminderId: string, scheduledTime: string): Promise<boolean> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_MEDICATIONS);
+    const list: PendingMedication[] = data ? JSON.parse(data) : [];
+    
+    const filtered = list.filter(p => !(p.reminderId === reminderId && p.scheduledTime === scheduledTime));
+    await AsyncStorage.setItem(STORAGE_KEYS.PENDING_MEDICATIONS, JSON.stringify(filtered));
+    return true;
+  } catch (error) {
+    console.error("Error removing pending medication:", error);
+    return false;
+  }
+}
+
+export async function clearPendingMedications(): Promise<boolean> {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_MEDICATIONS);
+    return true;
+  } catch (error) {
+    console.error("Error clearing pending medications:", error);
     return false;
   }
 }
